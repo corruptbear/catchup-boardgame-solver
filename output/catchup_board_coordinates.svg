@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="762" height="734" viewBox="0 0 762 734">
+<rect width="100%" height="100%" fill="#f7fbff"/>
+<text x="24" y="36" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#17324d">Catchup board coordinates</text>
+<text x="24" y="62" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#455a6d">Large label: axial coordinate (q,r). Small gray number: cell index 0-60.</text>
+<polygon points="271.87,116.00 235.49,137.00 199.12,116.00 199.12,74.00 235.49,53.00 271.87,74.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="344.61,116.00 308.24,137.00 271.87,116.00 271.87,74.00 308.24,53.00 344.61,74.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="417.36,116.00 380.98,137.00 344.61,116.00 344.61,74.00 380.98,53.00 417.36,74.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="490.10,116.00 453.73,137.00 417.36,116.00 417.36,74.00 453.73,53.00 490.10,74.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="562.85,116.00 526.48,137.00 490.10,116.00 490.10,74.00 526.48,53.00 562.85,74.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="235.49,179.00 199.12,200.00 162.75,179.00 162.75,137.00 199.12,116.00 235.49,137.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="308.24,179.00 271.87,200.00 235.49,179.00 235.49,137.00 271.87,116.00 308.24,137.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="380.98,179.00 344.61,200.00 308.24,179.00 308.24,137.00 344.61,116.00 380.98,137.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="453.73,179.00 417.36,200.00 380.98,179.00 380.98,137.00 417.36,116.00 453.73,137.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="526.48,179.00 490.10,200.00 453.73,179.00 453.73,137.00 490.10,116.00 526.48,137.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="599.22,179.00 562.85,200.00 526.48,179.00 526.48,137.00 562.85,116.00 599.22,137.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="199.12,242.00 162.75,263.00 126.37,242.00 126.37,200.00 162.75,179.00 199.12,200.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="271.87,242.00 235.49,263.00 199.12,242.00 199.12,200.00 235.49,179.00 271.87,200.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="344.61,242.00 308.24,263.00 271.87,242.00 271.87,200.00 308.24,179.00 344.61,200.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="417.36,242.00 380.98,263.00 344.61,242.00 344.61,200.00 380.98,179.00 417.36,200.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="490.10,242.00 453.73,263.00 417.36,242.00 417.36,200.00 453.73,179.00 490.10,200.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="562.85,242.00 526.48,263.00 490.10,242.00 490.10,200.00 526.48,179.00 562.85,200.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="635.60,242.00 599.22,263.00 562.85,242.00 562.85,200.00 599.22,179.00 635.60,200.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="162.75,305.00 126.37,326.00 90.00,305.00 90.00,263.00 126.37,242.00 162.75,263.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="235.49,305.00 199.12,326.00 162.75,305.00 162.75,263.00 199.12,242.00 235.49,263.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="308.24,305.00 271.87,326.00 235.49,305.00 235.49,263.00 271.87,242.00 308.24,263.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="380.98,305.00 344.61,326.00 308.24,305.00 308.24,263.00 344.61,242.00 380.98,263.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="453.73,305.00 417.36,326.00 380.98,305.00 380.98,263.00 417.36,242.00 453.73,263.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="526.48,305.00 490.10,326.00 453.73,305.00 453.73,263.00 490.10,242.00 526.48,263.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="599.22,305.00 562.85,326.00 526.48,305.00 526.48,263.00 562.85,242.00 599.22,263.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="671.97,305.00 635.60,326.00 599.22,305.00 599.22,263.00 635.60,242.00 671.97,263.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="126.37,368.00 90.00,389.00 53.63,368.00 53.63,326.00 90.00,305.00 126.37,326.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="199.12,368.00 162.75,389.00 126.37,368.00 126.37,326.00 162.75,305.00 199.12,326.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="271.87,368.00 235.49,389.00 199.12,368.00 199.12,326.00 235.49,305.00 271.87,326.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="344.61,368.00 308.24,389.00 271.87,368.00 271.87,326.00 308.24,305.00 344.61,326.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="417.36,368.00 380.98,389.00 344.61,368.00 344.61,326.00 380.98,305.00 417.36,326.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="490.10,368.00 453.73,389.00 417.36,368.00 417.36,326.00 453.73,305.00 490.10,326.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="562.85,368.00 526.48,389.00 490.10,368.00 490.10,326.00 526.48,305.00 562.85,326.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="635.60,368.00 599.22,389.00 562.85,368.00 562.85,326.00 599.22,305.00 635.60,326.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="708.34,368.00 671.97,389.00 635.60,368.00 635.60,326.00 671.97,305.00 708.34,326.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="162.75,431.00 126.37,452.00 90.00,431.00 90.00,389.00 126.37,368.00 162.75,389.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="235.49,431.00 199.12,452.00 162.75,431.00 162.75,389.00 199.12,368.00 235.49,389.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="308.24,431.00 271.87,452.00 235.49,431.00 235.49,389.00 271.87,368.00 308.24,389.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="380.98,431.00 344.61,452.00 308.24,431.00 308.24,389.00 344.61,368.00 380.98,389.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="453.73,431.00 417.36,452.00 380.98,431.00 380.98,389.00 417.36,368.00 453.73,389.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="526.48,431.00 490.10,452.00 453.73,431.00 453.73,389.00 490.10,368.00 526.48,389.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="599.22,431.00 562.85,452.00 526.48,431.00 526.48,389.00 562.85,368.00 599.22,389.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="671.97,431.00 635.60,452.00 599.22,431.00 599.22,389.00 635.60,368.00 671.97,389.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="199.12,494.00 162.75,515.00 126.37,494.00 126.37,452.00 162.75,431.00 199.12,452.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="271.87,494.00 235.49,515.00 199.12,494.00 199.12,452.00 235.49,431.00 271.87,452.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="344.61,494.00 308.24,515.00 271.87,494.00 271.87,452.00 308.24,431.00 344.61,452.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="417.36,494.00 380.98,515.00 344.61,494.00 344.61,452.00 380.98,431.00 417.36,452.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="490.10,494.00 453.73,515.00 417.36,494.00 417.36,452.00 453.73,431.00 490.10,452.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="562.85,494.00 526.48,515.00 490.10,494.00 490.10,452.00 526.48,431.00 562.85,452.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="635.60,494.00 599.22,515.00 562.85,494.00 562.85,452.00 599.22,431.00 635.60,452.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="235.49,557.00 199.12,578.00 162.75,557.00 162.75,515.00 199.12,494.00 235.49,515.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="308.24,557.00 271.87,578.00 235.49,557.00 235.49,515.00 271.87,494.00 308.24,515.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="380.98,557.00 344.61,578.00 308.24,557.00 308.24,515.00 344.61,494.00 380.98,515.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="453.73,557.00 417.36,578.00 380.98,557.00 380.98,515.00 417.36,494.00 453.73,515.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="526.48,557.00 490.10,578.00 453.73,557.00 453.73,515.00 490.10,494.00 526.48,515.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="599.22,557.00 562.85,578.00 526.48,557.00 526.48,515.00 562.85,494.00 599.22,515.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="271.87,620.00 235.49,641.00 199.12,620.00 199.12,578.00 235.49,557.00 271.87,578.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="344.61,620.00 308.24,641.00 271.87,620.00 271.87,578.00 308.24,557.00 344.61,578.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="417.36,620.00 380.98,641.00 344.61,620.00 344.61,578.00 380.98,557.00 417.36,578.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="490.10,620.00 453.73,641.00 417.36,620.00 417.36,578.00 453.73,557.00 490.10,578.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<polygon points="562.85,620.00 526.48,641.00 490.10,620.00 490.10,578.00 526.48,557.00 562.85,578.00" fill="#c7e7e4" stroke="#3998ff" stroke-width="2"/>
+<text x="235.49" y="90.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(0,-4)</text>
+<text x="235.49" y="113.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#0</text>
+<text x="308.24" y="90.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(1,-4)</text>
+<text x="308.24" y="113.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#1</text>
+<text x="380.98" y="90.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(2,-4)</text>
+<text x="380.98" y="113.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#2</text>
+<text x="453.73" y="90.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(3,-4)</text>
+<text x="453.73" y="113.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#3</text>
+<text x="526.48" y="90.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(4,-4)</text>
+<text x="526.48" y="113.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#4</text>
+<text x="199.12" y="153.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-1,-3)</text>
+<text x="199.12" y="176.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#5</text>
+<text x="271.87" y="153.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(0,-3)</text>
+<text x="271.87" y="176.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#6</text>
+<text x="344.61" y="153.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(1,-3)</text>
+<text x="344.61" y="176.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#7</text>
+<text x="417.36" y="153.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(2,-3)</text>
+<text x="417.36" y="176.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#8</text>
+<text x="490.10" y="153.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(3,-3)</text>
+<text x="490.10" y="176.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#9</text>
+<text x="562.85" y="153.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(4,-3)</text>
+<text x="562.85" y="176.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#10</text>
+<text x="162.75" y="216.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-2,-2)</text>
+<text x="162.75" y="239.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#11</text>
+<text x="235.49" y="216.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-1,-2)</text>
+<text x="235.49" y="239.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#12</text>
+<text x="308.24" y="216.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(0,-2)</text>
+<text x="308.24" y="239.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#13</text>
+<text x="380.98" y="216.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(1,-2)</text>
+<text x="380.98" y="239.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#14</text>
+<text x="453.73" y="216.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(2,-2)</text>
+<text x="453.73" y="239.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#15</text>
+<text x="526.48" y="216.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(3,-2)</text>
+<text x="526.48" y="239.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#16</text>
+<text x="599.22" y="216.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(4,-2)</text>
+<text x="599.22" y="239.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#17</text>
+<text x="126.37" y="279.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-3,-1)</text>
+<text x="126.37" y="302.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#18</text>
+<text x="199.12" y="279.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-2,-1)</text>
+<text x="199.12" y="302.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#19</text>
+<text x="271.87" y="279.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-1,-1)</text>
+<text x="271.87" y="302.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#20</text>
+<text x="344.61" y="279.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(0,-1)</text>
+<text x="344.61" y="302.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#21</text>
+<text x="417.36" y="279.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(1,-1)</text>
+<text x="417.36" y="302.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#22</text>
+<text x="490.10" y="279.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(2,-1)</text>
+<text x="490.10" y="302.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#23</text>
+<text x="562.85" y="279.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(3,-1)</text>
+<text x="562.85" y="302.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#24</text>
+<text x="635.60" y="279.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(4,-1)</text>
+<text x="635.60" y="302.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#25</text>
+<text x="90.00" y="342.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-4,0)</text>
+<text x="90.00" y="365.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#26</text>
+<text x="162.75" y="342.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-3,0)</text>
+<text x="162.75" y="365.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#27</text>
+<text x="235.49" y="342.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-2,0)</text>
+<text x="235.49" y="365.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#28</text>
+<text x="308.24" y="342.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-1,0)</text>
+<text x="308.24" y="365.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#29</text>
+<text x="380.98" y="342.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(0,0)</text>
+<text x="380.98" y="365.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#30</text>
+<text x="453.73" y="342.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(1,0)</text>
+<text x="453.73" y="365.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#31</text>
+<text x="526.48" y="342.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(2,0)</text>
+<text x="526.48" y="365.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#32</text>
+<text x="599.22" y="342.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(3,0)</text>
+<text x="599.22" y="365.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#33</text>
+<text x="671.97" y="342.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(4,0)</text>
+<text x="671.97" y="365.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#34</text>
+<text x="126.37" y="405.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-4,1)</text>
+<text x="126.37" y="428.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#35</text>
+<text x="199.12" y="405.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-3,1)</text>
+<text x="199.12" y="428.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#36</text>
+<text x="271.87" y="405.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-2,1)</text>
+<text x="271.87" y="428.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#37</text>
+<text x="344.61" y="405.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-1,1)</text>
+<text x="344.61" y="428.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#38</text>
+<text x="417.36" y="405.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(0,1)</text>
+<text x="417.36" y="428.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#39</text>
+<text x="490.10" y="405.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(1,1)</text>
+<text x="490.10" y="428.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#40</text>
+<text x="562.85" y="405.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(2,1)</text>
+<text x="562.85" y="428.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#41</text>
+<text x="635.60" y="405.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(3,1)</text>
+<text x="635.60" y="428.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#42</text>
+<text x="162.75" y="468.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-4,2)</text>
+<text x="162.75" y="491.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#43</text>
+<text x="235.49" y="468.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-3,2)</text>
+<text x="235.49" y="491.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#44</text>
+<text x="308.24" y="468.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-2,2)</text>
+<text x="308.24" y="491.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#45</text>
+<text x="380.98" y="468.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-1,2)</text>
+<text x="380.98" y="491.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#46</text>
+<text x="453.73" y="468.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(0,2)</text>
+<text x="453.73" y="491.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#47</text>
+<text x="526.48" y="468.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(1,2)</text>
+<text x="526.48" y="491.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#48</text>
+<text x="599.22" y="468.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(2,2)</text>
+<text x="599.22" y="491.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#49</text>
+<text x="199.12" y="531.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-4,3)</text>
+<text x="199.12" y="554.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#50</text>
+<text x="271.87" y="531.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-3,3)</text>
+<text x="271.87" y="554.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#51</text>
+<text x="344.61" y="531.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-2,3)</text>
+<text x="344.61" y="554.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#52</text>
+<text x="417.36" y="531.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-1,3)</text>
+<text x="417.36" y="554.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#53</text>
+<text x="490.10" y="531.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(0,3)</text>
+<text x="490.10" y="554.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#54</text>
+<text x="562.85" y="531.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(1,3)</text>
+<text x="562.85" y="554.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#55</text>
+<text x="235.49" y="594.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-4,4)</text>
+<text x="235.49" y="617.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#56</text>
+<text x="308.24" y="594.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-3,4)</text>
+<text x="308.24" y="617.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#57</text>
+<text x="380.98" y="594.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-2,4)</text>
+<text x="380.98" y="617.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#58</text>
+<text x="453.73" y="594.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(-1,4)</text>
+<text x="453.73" y="617.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#59</text>
+<text x="526.48" y="594.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#083047">(0,4)</text>
+<text x="526.48" y="617.00" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5e7488">#60</text>
+</svg>

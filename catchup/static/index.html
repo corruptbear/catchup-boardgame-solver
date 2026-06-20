@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Catchup Self Play</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="board-area" aria-label="Catchup board">
+        <div class="top-bar">
+          <div>
+            <h1>Catchup</h1>
+            <p id="status-line"></p>
+          </div>
+          <div class="actions">
+            <button id="finish-button" type="button">Finish turn</button>
+            <button id="undo-button" type="button">Undo</button>
+            <button id="reset-button" type="button">Reset</button>
+          </div>
+        </div>
+        <svg id="board" role="img" aria-label="Catchup hex board"></svg>
+      </section>
+
+      <aside class="side-panel">
+        <section class="turn-panel">
+          <h2>Turn</h2>
+          <dl>
+            <div>
+              <dt>Player</dt>
+              <dd id="current-player"></dd>
+            </div>
+            <div>
+              <dt>Claims</dt>
+              <dd id="claim-count"></dd>
+            </div>
+            <div>
+              <dt>Empty</dt>
+              <dd id="empty-count"></dd>
+            </div>
+            <div>
+              <dt>Turns</dt>
+              <dd id="turn-count"></dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="score-panel player-blue">
+          <h2>Blue Groups</h2>
+          <div class="largest" id="blue-largest"></div>
+          <div class="groups" id="blue-groups"></div>
+        </section>
+
+        <section class="score-panel player-white">
+          <h2>White Groups</h2>
+          <div class="largest" id="white-largest"></div>
+          <div class="groups" id="white-groups"></div>
+        </section>
+
+        <section class="message-panel">
+          <h2>State</h2>
+          <p id="message"></p>
+        </section>
+      </aside>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

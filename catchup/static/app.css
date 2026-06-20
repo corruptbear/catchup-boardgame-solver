@@ -1,0 +1,274 @@
+:root {
+  color-scheme: light;
+  --bg: #eef4f7;
+  --surface: #ffffff;
+  --ink: #182935;
+  --muted: #617381;
+  --line: #cad8df;
+  --empty: #c4e5df;
+  --empty-hover: #d7f0ec;
+  --blue: #0926e8;
+  --blue-soft: #dbe3ff;
+  --white: #f2f1dc;
+  --white-line: #c7c3a9;
+  --accent: #157f78;
+  --danger: #a83f3f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+button:disabled {
+  color: #97a5ad;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+button:not(:disabled):hover {
+  border-color: var(--accent);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(660px, 1fr) 320px;
+  gap: 18px;
+  min-height: 100vh;
+  padding: 18px;
+}
+
+.board-area,
+.side-panel > section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.board-area {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 680px;
+  overflow: hidden;
+}
+
+.top-bar {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  min-height: 74px;
+  padding: 12px 16px;
+}
+
+h1,
+h2,
+p,
+dl {
+  margin: 0;
+}
+
+h1 {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: 14px;
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin-bottom: 12px;
+}
+
+#status-line {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+#finish-button:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+#board {
+  height: 100%;
+  min-height: 590px;
+  width: 100%;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.side-panel > section {
+  padding: 14px;
+}
+
+dl {
+  display: grid;
+  gap: 9px;
+}
+
+dl > div {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+}
+
+dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+dd {
+  font-size: 16px;
+  font-weight: 750;
+  margin: 0;
+}
+
+.largest {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
+}
+
+.group-chip {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 750;
+  min-width: 30px;
+  justify-content: center;
+  padding: 5px 9px;
+}
+
+.player-blue .group-chip {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.player-white .group-chip {
+  background: var(--white);
+  border: 1px solid var(--white-line);
+  color: #575037;
+}
+
+#message {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.cell polygon {
+  stroke: #3b9ef4;
+  stroke-width: 1.8;
+  transition: fill 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+}
+
+.cell text {
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.cell .coord-label {
+  fill: #173647;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.cell .index-label {
+  fill: #607888;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.cell.empty polygon {
+  fill: var(--empty);
+}
+
+.cell.blue polygon {
+  fill: var(--blue);
+  stroke: #071bb1;
+}
+
+.cell.blue text {
+  fill: #ffffff;
+}
+
+.cell.white polygon {
+  fill: var(--white);
+  stroke: var(--white-line);
+}
+
+.cell.selected polygon {
+  stroke: #0d7e73;
+  stroke-width: 4;
+}
+
+.cell.legal {
+  cursor: pointer;
+}
+
+.cell.legal polygon {
+  filter: drop-shadow(0 3px 4px rgba(21, 127, 120, 0.25));
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.cell.legal:hover polygon {
+  fill: var(--empty-hover);
+}
+
+.cell.disabled {
+  cursor: default;
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .board-area {
+    min-height: auto;
+  }
+}

@@ -1,0 +1,176 @@
+const PLAYER_ONE = 0;
+const PLAYER_TWO = 1;
+const EMPTY = -1;
+
+const board = document.querySelector("#board");
+const finishButton = document.querySelector("#finish-button");
+const undoButton = document.querySelector("#undo-button");
+const resetButton = document.querySelector("#reset-button");
+const statusLine = document.querySelector("#status-line");
+const currentPlayer = document.querySelector("#current-player");
+const claimCount = document.querySelector("#claim-count");
+const emptyCount = document.querySelector("#empty-count");
+const turnCount = document.querySelector("#turn-count");
+const blueLargest = document.querySelector("#blue-largest");
+const whiteLargest = document.querySelector("#white-largest");
+const blueGroups = document.querySelector("#blue-groups");
+const whiteGroups = document.querySelector("#white-groups");
+const message = document.querySelector("#message");
+
+const cellSize = 34;
+const sqrt3 = Math.sqrt(3);
+let state = null;
+
+function centerFor(cell) {
+  return {
+    x: cellSize * sqrt3 * (cell.q + cell.r / 2),
+    y: cellSize * 1.5 * cell.r,
+  };
+}
+
+function hexPoints(cx, cy) {
+  const points = [];
+  for (let corner = 0; corner < 6; corner += 1) {
+    const angle = Math.PI / 6 + corner * Math.PI / 3;
+    points.push(`${(cx + cellSize * Math.cos(angle)).toFixed(2)},${(cy + cellSize * Math.sin(angle)).toFixed(2)}`);
+  }
+  return points.join(" ");
+}
+
+function ownerClass(owner) {
+  if (owner === PLAYER_ONE) return "blue";
+  if (owner === PLAYER_TWO) return "white";
+  return "empty";
+}
+
+function selectedSet() {
+  return new Set(state.selected);
+}
+
+function legalSet() {
+  return new Set(state.legal_actions);
+}
+
+async function postJson(url, body = {}) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    state = payload.state;
+    render();
+    message.textContent = payload.error;
+    return;
+  }
+  state = payload;
+  render();
+}
+
+async function loadState() {
+  const response = await fetch("/api/state");
+  state = await response.json();
+  render();
+}
+
+function renderBoard() {
+  const centers = state.board.cells.map((cell) => ({ cell, ...centerFor(cell) }));
+  const minX = Math.min(...centers.map((item) => item.x));
+  const maxX = Math.max(...centers.map((item) => item.x));
+  const minY = Math.min(...centers.map((item) => item.y));
+  const maxY = Math.max(...centers.map((item) => item.y));
+  const margin = 48;
+  const width = maxX - minX + margin * 2;
+  const height = maxY - minY + margin * 2;
+  const legal = legalSet();
+  const selected = selectedSet();
+
+  board.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  board.replaceChildren();
+
+  for (const item of centers) {
+    const cx = item.x - minX + margin;
+    const cy = item.y - minY + margin;
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    const coordLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const indexLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    const isLegal = legal.has(item.cell.index);
+
+    group.classList.add("cell", ownerClass(item.cell.owner));
+    group.classList.toggle("legal", isLegal);
+    group.classList.toggle("disabled", !isLegal);
+    group.classList.toggle("selected", selected.has(item.cell.index));
+    group.dataset.index = String(item.cell.index);
+
+    polygon.setAttribute("points", hexPoints(cx, cy));
+    coordLabel.setAttribute("x", cx);
+    coordLabel.setAttribute("y", cy - 4);
+    coordLabel.setAttribute("class", "coord-label");
+    coordLabel.textContent = `(${item.cell.q},${item.cell.r})`;
+    indexLabel.setAttribute("x", cx);
+    indexLabel.setAttribute("y", cy + 13);
+    indexLabel.setAttribute("class", "index-label");
+    indexLabel.textContent = `#${item.cell.index}`;
+    title.textContent = `Cell ${item.cell.index}, coordinate (${item.cell.q}, ${item.cell.r})`;
+
+    if (isLegal) {
+      group.addEventListener("click", () => postJson("/api/action", { action: item.cell.index }));
+    }
+
+    group.append(title, polygon, coordLabel, indexLabel);
+    board.append(group);
+  }
+}
+
+function renderGroups(container, sizes) {
+  container.replaceChildren();
+  if (sizes.length === 0) {
+    const empty = document.createElement("span");
+    empty.className = "group-chip";
+    empty.textContent = "0";
+    container.append(empty);
+    return;
+  }
+  for (const size of sizes) {
+    const chip = document.createElement("span");
+    chip.className = "group-chip";
+    chip.textContent = String(size);
+    container.append(chip);
+  }
+}
+
+function renderStats() {
+  const blue = state.players.find((player) => player.id === PLAYER_ONE);
+  const white = state.players.find((player) => player.id === PLAYER_TWO);
+  const selectedCount = state.selected.length;
+
+  statusLine.textContent = state.terminal
+    ? `Game over: ${state.winner}`
+    : `${state.current_player_name} to claim ${Math.max(0, state.max_claims - selectedCount)} more, or finish when available.`;
+  currentPlayer.textContent = state.current_player_name;
+  claimCount.textContent = `${selectedCount}/${state.max_claims}`;
+  emptyCount.textContent = state.empty_count;
+  turnCount.textContent = state.completed_turns;
+  blueLargest.textContent = `Largest: ${blue.largest_group}`;
+  whiteLargest.textContent = `Largest: ${white.largest_group}`;
+  message.textContent = state.message;
+
+  renderGroups(blueGroups, blue.group_sizes);
+  renderGroups(whiteGroups, white.group_sizes);
+
+  finishButton.disabled = !state.legal_actions.includes(state.finish_action);
+}
+
+function render() {
+  if (!state) return;
+  renderBoard();
+  renderStats();
+}
+
+finishButton.addEventListener("click", () => postJson("/api/action", { action: state.finish_action }));
+undoButton.addEventListener("click", () => postJson("/api/undo"));
+resetButton.addEventListener("click", () => postJson("/api/reset"));
+loadState();
