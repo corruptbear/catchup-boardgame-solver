@@ -102,6 +102,7 @@ class ComponentTracker:
         # regions that actually referenced the merged root.
         self.empty_adjacency: dict[int, list[set[int]]] = {}
         self.claimed_adjacent_empty: list[dict[int, set[int]]] = [dict(), dict()]
+        self._undo_log = None
 
         if cell_owners is not None:
             self._rebuild_claimed_components_from_cell_owners()
@@ -142,7 +143,53 @@ class ComponentTracker:
             }
             for player_roots in self.claimed_adjacent_empty
         ]
+        clone._undo_log = None
         return clone
+
+    def undo_checkpoint(self) -> int:
+        """Start recording deltas and return a rollback point."""
+
+        if self._undo_log is None:
+            self._undo_log = []
+        return len(self._undo_log)
+
+    def rollback_to(self, checkpoint: int) -> None:
+        """Undo all tracker mutations back to ``checkpoint``."""
+
+        undo_log = self._undo_log
+        if undo_log is None:
+            if checkpoint != 0:
+                raise ValueError("unknown undo checkpoint")
+            return
+        if checkpoint < 0 or checkpoint > len(undo_log):
+            raise ValueError("unknown undo checkpoint")
+
+        while len(undo_log) > checkpoint:
+            entry = undo_log.pop()
+            operation = entry[0]
+            if operation == "list_set":
+                _, values, index, old_value = entry
+                values[index] = old_value
+            elif operation == "attr_set":
+                _, name, old_value = entry
+                setattr(self, name, old_value)
+            elif operation == "set_add":
+                _, values, item = entry
+                values.add(item)
+            elif operation == "set_remove":
+                _, values, item = entry
+                values.remove(item)
+            elif operation == "dict_restore":
+                _, values, key, had_key, old_value = entry
+                if had_key:
+                    values[key] = old_value
+                else:
+                    del values[key]
+            else:
+                raise RuntimeError(f"unknown undo operation: {operation}")
+
+        if checkpoint == 0:
+            self._undo_log = None
 
     def owner(self, cell: int) -> int:
         """Return the raw owner for UI/debug display; not used by MCTS."""
@@ -182,11 +229,11 @@ class ComponentTracker:
         # Capture the old empty region before changing ownership. After the
         # claim, only that old region can have split.
         old_empty_root = self.empty_component_of[cell]
-        self.cell_owners[cell] = player
-        self._empty_count -= 1
-        self.parents[cell] = cell
-        self.sizes[cell] = 1
-        self.roots[player].add(cell)
+        self._set_list(self.cell_owners, cell, player)
+        self._set_attr("_empty_count", self._empty_count - 1)
+        self._set_list(self.parents, cell, cell)
+        self._set_list(self.sizes, cell, 1)
+        self._set_add(self.roots[player], cell)
         self._add_group_size(player, 1)
 
         for neighbor in self.board.neighbors[cell]:
@@ -321,14 +368,14 @@ class ComponentTracker:
         # Attach the smaller claimed component to the larger root. The size is
         # stored only on active roots; non-root sizes are cleared to catch
         # accidental use in debugging.
-        self.parents[second_root] = first_root
-        self.sizes[first_root] = merged_size
-        self.sizes[second_root] = 0
+        self._set_list(self.parents, second_root, first_root)
+        self._set_list(self.sizes, first_root, merged_size)
+        self._set_list(self.sizes, second_root, 0)
         self._remove_group_size(player, first_size)
         self._remove_group_size(player, second_size)
         self._add_group_size(player, merged_size)
 
-        self.roots[player].discard(second_root)
+        self._set_discard(self.roots[player], second_root)
         self._replace_adjacent_claimed_root(player, second_root, first_root)
         return first_root
 
@@ -337,18 +384,20 @@ class ComponentTracker:
         if parent == -1:
             raise ValueError(f"cell {cell} is not claimed")
         if parent != cell:
-            self.parents[cell] = self._find(parent)
+            self._set_list(self.parents, cell, self._find(parent))
         return self.parents[cell]
 
     def _add_group_size(self, player: int, size: int) -> None:
-        self.size_histogram[player][size] += 1
+        histogram = self.size_histogram[player]
+        self._set_list(histogram, size, histogram[size] + 1)
         if size > self.max_group_size[player]:
-            self.max_group_size[player] = size
+            self._set_list(self.max_group_size, player, size)
 
     def _remove_group_size(self, player: int, size: int) -> None:
         # max_group_size never decreases in Catchup: claimed components only grow
         # by adding cells or merging with other same-color components.
-        self.size_histogram[player][size] -= 1
+        histogram = self.size_histogram[player]
+        self._set_list(histogram, size, histogram[size] - 1)
 
     def _rebuild_claimed_components_from_cell_owners(self) -> None:
         """Build claimed union-find state from an existing owner array."""
@@ -398,8 +447,8 @@ class ComponentTracker:
             unvisited,
         )
         if not unvisited and old_root != claimed_cell:
-            old_cells.remove(claimed_cell)
-            self.empty_component_of[claimed_cell] = -1
+            self._set_remove(old_cells, claimed_cell)
+            self._set_list(self.empty_component_of, claimed_cell, -1)
             self._refresh_empty_component_adjacency(old_root, adjacency)
             return
 
@@ -451,11 +500,11 @@ class ComponentTracker:
     ) -> None:
         """Add one empty region and its claimed-component boundary links."""
 
-        self.empty_component_cells[root] = cells
+        self._set_dict(self.empty_component_cells, root, cells)
         for cell in cells:
-            self.empty_component_of[cell] = root
+            self._set_list(self.empty_component_of, cell, root)
 
-        self.empty_adjacency[root] = adjacency
+        self._set_dict(self.empty_adjacency, root, adjacency)
         self._add_empty_adjacency_reverse_links(root, adjacency)
 
     def _unregister_empty_component(self, root: int) -> set[int]:
@@ -464,11 +513,11 @@ class ComponentTracker:
         if root == -1:
             return set()
 
-        cells = self.empty_component_cells.pop(root)
+        cells = self._pop_dict(self.empty_component_cells, root)
         for cell in cells:
-            self.empty_component_of[cell] = -1
+            self._set_list(self.empty_component_of, cell, -1)
 
-        adjacency = self.empty_adjacency.pop(root)
+        adjacency = self._pop_dict(self.empty_adjacency, root)
         self._remove_empty_adjacency_reverse_links(root, adjacency)
         return cells
 
@@ -481,7 +530,7 @@ class ComponentTracker:
 
         old_adjacency = self.empty_adjacency[root]
         self._remove_empty_adjacency_reverse_links(root, old_adjacency)
-        self.empty_adjacency[root] = new_adjacency
+        self._set_dict(self.empty_adjacency, root, new_adjacency)
         self._add_empty_adjacency_reverse_links(root, new_adjacency)
 
     def _add_empty_adjacency_reverse_links(
@@ -491,10 +540,11 @@ class ComponentTracker:
     ) -> None:
         for player in PLAYERS:
             for touching_claimed_root in adjacency[player]:
-                self.claimed_adjacent_empty[player].setdefault(
+                empty_roots = self._setdefault_set(
+                    self.claimed_adjacent_empty[player],
                     touching_claimed_root,
-                    set(),
-                ).add(empty_root)
+                )
+                self._set_add(empty_roots, empty_root)
 
     def _remove_empty_adjacency_reverse_links(
         self,
@@ -507,22 +557,117 @@ class ComponentTracker:
                     touching_claimed_root,
                 )
                 if empty_roots is not None:
-                    empty_roots.discard(empty_root)
+                    self._set_discard(empty_roots, empty_root)
                     if not empty_roots:
-                        del self.claimed_adjacent_empty[player][touching_claimed_root]
+                        self._pop_dict(
+                            self.claimed_adjacent_empty[player],
+                            touching_claimed_root,
+                        )
 
     def _replace_adjacent_claimed_root(self, player: int, old_root: int, new_root: int) -> None:
         """Update empty-region boundary links after two claimed roots merge."""
 
-        empty_roots = self.claimed_adjacent_empty[player].pop(old_root, set())
+        empty_roots = self._pop_dict(
+            self.claimed_adjacent_empty[player],
+            old_root,
+            set(),
+        )
         if not empty_roots:
             return
 
-        new_empty_roots = self.claimed_adjacent_empty[player].setdefault(new_root, set())
+        new_empty_roots = self._setdefault_set(
+            self.claimed_adjacent_empty[player],
+            new_root,
+        )
         for empty_root in empty_roots:
             adjacency = self.empty_adjacency.get(empty_root)
             if adjacency is None:
                 continue
-            adjacency[player].discard(old_root)
-            adjacency[player].add(new_root)
-            new_empty_roots.add(empty_root)
+            self._set_discard(adjacency[player], old_root)
+            self._set_add(adjacency[player], new_root)
+            self._set_add(new_empty_roots, empty_root)
+
+    def _record_undo(self, entry: tuple) -> None:
+        if self._undo_log is not None:
+            self._undo_log.append(entry)
+
+    def _set_list(self, values: list, index: int, value: object) -> None:
+        if self._undo_log is None:
+            values[index] = value
+            return
+
+        old_value = values[index]
+        if old_value == value:
+            return
+        self._record_undo(("list_set", values, index, old_value))
+        values[index] = value
+
+    def _set_attr(self, name: str, value: object) -> None:
+        if self._undo_log is None:
+            setattr(self, name, value)
+            return
+
+        old_value = getattr(self, name)
+        if old_value == value:
+            return
+        self._record_undo(("attr_set", name, old_value))
+        setattr(self, name, value)
+
+    def _set_add(self, values: set, item: object) -> None:
+        if self._undo_log is None:
+            values.add(item)
+            return
+
+        if item in values:
+            return
+        self._record_undo(("set_remove", values, item))
+        values.add(item)
+
+    def _set_remove(self, values: set, item: object) -> None:
+        if self._undo_log is None:
+            values.remove(item)
+            return
+
+        self._record_undo(("set_add", values, item))
+        values.remove(item)
+
+    def _set_discard(self, values: set, item: object) -> None:
+        if self._undo_log is None:
+            values.discard(item)
+            return
+
+        if item not in values:
+            return
+        self._set_remove(values, item)
+
+    def _set_dict(self, values: dict, key: object, value: object) -> None:
+        if self._undo_log is None:
+            values[key] = value
+            return
+
+        had_key = key in values
+        old_value = values.get(key)
+        self._record_undo(("dict_restore", values, key, had_key, old_value))
+        values[key] = value
+
+    def _pop_dict(self, values: dict, key: object, default: object = None) -> object:
+        if self._undo_log is None:
+            return values.pop(key, default)
+
+        if key not in values:
+            return default
+        old_value = values.pop(key)
+        self._record_undo(("dict_restore", values, key, True, old_value))
+        return old_value
+
+    def _setdefault_set(self, values: dict, key: object) -> set:
+        if self._undo_log is None:
+            return values.setdefault(key, set())
+
+        existing = values.get(key)
+        if existing is not None:
+            return existing
+
+        created: set = set()
+        self._set_dict(values, key, created)
+        return created

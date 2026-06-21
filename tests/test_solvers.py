@@ -1,8 +1,15 @@
+import random
 import unittest
 
 from catchup.board import BOARD
 from catchup.game import FINISH, GameState
-from catchup.solvers import MCTSPlayer, RandomPlayer, random_playout
+from catchup.solvers import (
+    MCTSPlayer,
+    RandomPlayer,
+    fast_random_playout,
+    random_playout,
+    undo_random_playout_result,
+)
 
 
 class RandomPlayerTest(unittest.TestCase):
@@ -56,6 +63,71 @@ class RandomPlayerTest(unittest.TestCase):
     def test_random_playout_max_actions_guard(self) -> None:
         with self.assertRaises(RuntimeError):
             random_playout(player=RandomPlayer.with_seed(1), max_actions=1)
+
+    def test_fast_random_playout_matches_random_playout_with_seed(self) -> None:
+        state = GameState.new().apply_action(20)
+
+        slow = random_playout(state, RandomPlayer.with_seed(41))
+        fast = fast_random_playout(state, random.Random(41))
+
+        self.assertTrue(fast.is_terminal())
+        self.assertEqual(fast.tracker.cell_owners, slow.tracker.cell_owners)
+        self.assertEqual(fast.group_sizes(0), slow.group_sizes(0))
+        self.assertEqual(fast.group_sizes(1), slow.group_sizes(1))
+        self.assertEqual(fast.winner(), slow.winner())
+
+    def test_fast_random_playout_does_not_mutate_start_state(self) -> None:
+        state = GameState.new().apply_action(30)
+        before_cell_owners = state.tracker.cell_owners.copy()
+        before_selected = state.selected
+
+        terminal = fast_random_playout(state, random.Random(31))
+
+        self.assertTrue(terminal.is_terminal())
+        self.assertEqual(state.tracker.cell_owners, before_cell_owners)
+        self.assertEqual(state.selected, before_selected)
+        self.assertFalse(state.is_terminal())
+
+    def test_fast_random_playout_max_actions_guard(self) -> None:
+        with self.assertRaises(RuntimeError):
+            fast_random_playout(rng=random.Random(1), max_actions=1)
+
+    def test_undo_random_playout_matches_fast_playout_with_seed(self) -> None:
+        state = GameState.new().apply_action(20)
+
+        fast = fast_random_playout(state, random.Random(41))
+        undo = undo_random_playout_result(state, random.Random(41))
+
+        self.assertEqual(undo.result_for(0), fast.result_for(0))
+        self.assertEqual(undo.result_for(1), fast.result_for(1))
+
+    def test_undo_random_playout_restores_start_state(self) -> None:
+        state = GameState.new().apply_action(30)
+        before_cell_owners = state.tracker.cell_owners.copy()
+        before_empty_components = state.tracker.empty_components()
+        before_blue_sizes = state.group_sizes(0)
+        before_white_sizes = state.group_sizes(1)
+
+        result = undo_random_playout_result(state, random.Random(31))
+
+        self.assertIn(result.result_for(0), (-1, 0, 1))
+        self.assertEqual(state.tracker.cell_owners, before_cell_owners)
+        self.assertEqual(state.tracker.empty_components(), before_empty_components)
+        self.assertEqual(state.group_sizes(0), before_blue_sizes)
+        self.assertEqual(state.group_sizes(1), before_white_sizes)
+        self.assertIsNone(state.tracker._undo_log)
+
+    def test_undo_random_playout_restores_after_max_actions_guard(self) -> None:
+        state = GameState.new().apply_action(30)
+        before_cell_owners = state.tracker.cell_owners.copy()
+        before_empty_count = state.tracker.empty_count()
+
+        with self.assertRaises(RuntimeError):
+            undo_random_playout_result(state, random.Random(1), max_actions=1)
+
+        self.assertEqual(state.tracker.cell_owners, before_cell_owners)
+        self.assertEqual(state.tracker.empty_count(), before_empty_count)
+        self.assertIsNone(state.tracker._undo_log)
 
 
 class MCTSPlayerTest(unittest.TestCase):
@@ -149,6 +221,23 @@ class MCTSPlayerTest(unittest.TestCase):
 
         self.assertEqual(state.tracker.cell_owners, before_cell_owners)
         self.assertEqual(state.selected, before_selected)
+
+    def test_undo_rollout_search_does_not_mutate_start_state(self) -> None:
+        state = GameState.new().apply_action(30)
+        before_cell_owners = state.tracker.cell_owners.copy()
+        before_empty_components = state.tracker.empty_components()
+        before_selected = state.selected
+
+        MCTSPlayer(
+            simulations=10,
+            rng=random.Random(17),
+            use_undo_rollout=True,
+        ).search(state)
+
+        self.assertEqual(state.tracker.cell_owners, before_cell_owners)
+        self.assertEqual(state.tracker.empty_components(), before_empty_components)
+        self.assertEqual(state.selected, before_selected)
+        self.assertIsNone(state.tracker._undo_log)
 
     def test_constructor_rejects_invalid_settings(self) -> None:
         with self.assertRaises(ValueError):

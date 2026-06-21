@@ -3,7 +3,16 @@
 from .board import BOARD, Board
 from .components import ComponentTracker, EmptyComponent
 from .game import EMPTY, FINISH, PLAYER_ONE, PLAYER_TWO, GameState
-from .solvers import MCTSNode, MCTSPlayer, RandomPlayer, random_playout
+from .solvers import (
+    FastRolloutState,
+    MCTSNode,
+    MCTSPlayer,
+    RandomPlayer,
+    RolloutResult,
+    fast_random_playout,
+    random_playout,
+    undo_random_playout_result,
+)
 
 __all__ = [
     "BOARD",
@@ -15,8 +24,12 @@ __all__ = [
     "GameState",
     "PLAYER_ONE",
     "PLAYER_TWO",
+    "FastRolloutState",
     "MCTSNode",
     "MCTSPlayer",
     "RandomPlayer",
+    "RolloutResult",
+    "fast_random_playout",
     "random_playout",
+    "undo_random_playout_result",
 ]

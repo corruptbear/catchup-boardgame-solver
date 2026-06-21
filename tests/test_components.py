@@ -4,6 +4,44 @@ from catchup.board import BOARD
 from catchup.components import EMPTY, PLAYER_ONE, PLAYER_TWO, ComponentTracker
 
 
+def tracker_signature(tracker: ComponentTracker) -> tuple:
+    return (
+        tuple(tracker.cell_owners),
+        tuple(tracker.parents),
+        tuple(tracker.sizes),
+        tuple(tuple(sorted(root_set)) for root_set in tracker.roots),
+        tuple(tuple(histogram) for histogram in tracker.size_histogram),
+        tuple(tracker.max_group_size),
+        tracker.empty_count(),
+        tuple(tracker.empty_component_of),
+        tuple(
+            sorted(
+                (root, tuple(sorted(cells)))
+                for root, cells in tracker.empty_component_cells.items()
+            )
+        ),
+        tuple(
+            sorted(
+                (
+                    root,
+                    tuple(sorted(adjacency[PLAYER_ONE])),
+                    tuple(sorted(adjacency[PLAYER_TWO])),
+                )
+                for root, adjacency in tracker.empty_adjacency.items()
+            )
+        ),
+        tuple(
+            tuple(
+                sorted(
+                    (root, tuple(sorted(empty_roots)))
+                    for root, empty_roots in player_roots.items()
+                )
+            )
+            for player_roots in tracker.claimed_adjacent_empty
+        ),
+    )
+
+
 class ComponentTrackerTest(unittest.TestCase):
     def test_claim_merges_adjacent_same_color_cells(self) -> None:
         tracker = ComponentTracker()
@@ -267,6 +305,83 @@ class ComponentTrackerTest(unittest.TestCase):
         self.assertEqual(tracker.group_sizes(PLAYER_ONE), (3,))
         self.assertEqual(after_blue_roots, {final_root})
         self.assertNotIn(left if left != final_root else right, after_blue_roots)
+
+    def test_rollback_restores_claim_without_empty_split(self) -> None:
+        tracker = ComponentTracker()
+        center = BOARD.index(0, 0)
+        before = tracker_signature(tracker)
+
+        checkpoint = tracker.undo_checkpoint()
+        tracker.claim(PLAYER_ONE, center)
+        self.assertNotEqual(tracker_signature(tracker), before)
+
+        tracker.rollback_to(checkpoint)
+
+        self.assertEqual(tracker_signature(tracker), before)
+        self.assertIsNone(tracker._undo_log)
+
+    def test_rollback_restores_claim_that_merges_many_groups(self) -> None:
+        tracker = ComponentTracker()
+        bridge = BOARD.index(0, 0)
+        spokes = (
+            BOARD.index(1, 0),
+            BOARD.index(0, -1),
+            BOARD.index(-1, 1),
+        )
+        for cell in spokes:
+            tracker.claim(PLAYER_ONE, cell)
+        before = tracker_signature(tracker)
+
+        checkpoint = tracker.undo_checkpoint()
+        tracker.claim(PLAYER_ONE, bridge)
+        self.assertEqual(tracker.group_sizes(PLAYER_ONE), (4,))
+
+        tracker.rollback_to(checkpoint)
+
+        self.assertEqual(tracker_signature(tracker), before)
+        self.assertEqual(tracker.group_sizes(PLAYER_ONE), (1, 1, 1))
+        self.assertIsNone(tracker._undo_log)
+
+    def test_rollback_restores_claim_that_splits_empty_region(self) -> None:
+        center = BOARD.index(0, 0)
+        spokes = (
+            BOARD.index(1, 0),
+            BOARD.index(0, -1),
+            BOARD.index(-1, 1),
+        )
+        cell_owners = [PLAYER_TWO] * BOARD.cell_count
+        for cell in (*spokes, center):
+            cell_owners[cell] = EMPTY
+        tracker = ComponentTracker(cell_owners=cell_owners)
+        before = tracker_signature(tracker)
+
+        checkpoint = tracker.undo_checkpoint()
+        tracker.claim(PLAYER_ONE, center)
+        self.assertEqual(len(tracker.empty_components()), 3)
+
+        tracker.rollback_to(checkpoint)
+
+        self.assertEqual(tracker_signature(tracker), before)
+        self.assertIsNone(tracker._undo_log)
+
+    def test_rollback_supports_nested_checkpoints(self) -> None:
+        tracker = ComponentTracker()
+        first = BOARD.index(0, 0)
+        second = BOARD.index(1, 0)
+        before = tracker_signature(tracker)
+
+        outer = tracker.undo_checkpoint()
+        tracker.claim(PLAYER_ONE, first)
+        after_first = tracker_signature(tracker)
+        inner = tracker.undo_checkpoint()
+        tracker.claim(PLAYER_ONE, second)
+
+        tracker.rollback_to(inner)
+        self.assertEqual(tracker_signature(tracker), after_first)
+
+        tracker.rollback_to(outer)
+        self.assertEqual(tracker_signature(tracker), before)
+        self.assertIsNone(tracker._undo_log)
 
     def test_reachable_group_bounds_initially_allow_whole_board(self) -> None:
         tracker = ComponentTracker()
