@@ -94,10 +94,29 @@ class GameState:
         return state
 
     def is_terminal(self) -> bool:
-        return self.tracker.empty_count() == 0 and not self.selected
+        if self.selected:
+            return False
+        return self.tracker.empty_count() == 0 or self.proven_winner() is not None
 
     def group_sizes(self, player: int) -> tuple[int, ...]:
         return self.tracker.group_sizes(player)
+
+    def proven_winner(self) -> int | None:
+        """Return a winner only when reachable-region bounds prove the result."""
+
+        if self.selected:
+            return None
+
+        blue_sizes = self.tracker.group_sizes(PLAYER_ONE)
+        white_sizes = self.tracker.group_sizes(PLAYER_TWO)
+        blue_bound = self.tracker.reachable_group_bounds(PLAYER_ONE)
+        white_bound = self.tracker.reachable_group_bounds(PLAYER_TWO)
+
+        if compare_size_vectors(blue_sizes, white_bound) > 0:
+            return PLAYER_ONE
+        if compare_size_vectors(white_sizes, blue_bound) > 0:
+            return PLAYER_TWO
+        return None
 
     def winner(self) -> int | None:
         """Return the winning player for a terminal state, or None for a tie."""

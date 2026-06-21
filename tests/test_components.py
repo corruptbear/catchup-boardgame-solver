@@ -212,6 +212,27 @@ class ComponentTrackerTest(unittest.TestCase):
         self.assertEqual(after_blue_roots, {final_root})
         self.assertNotIn(left if left != final_root else right, after_blue_roots)
 
+    def test_reachable_group_bounds_initially_allow_whole_board(self) -> None:
+        tracker = ComponentTracker()
+
+        self.assertEqual(tracker.reachable_group_bounds(PLAYER_ONE), (BOARD.cell_count,))
+        self.assertEqual(tracker.reachable_group_bounds(PLAYER_TWO), (BOARD.cell_count,))
+
+    def test_reachable_group_bounds_group_claimed_and_empty_components(self) -> None:
+        center = BOARD.index(0, 0)
+        spokes = (
+            BOARD.index(1, 0),
+            BOARD.index(0, -1),
+            BOARD.index(-1, 1),
+        )
+        cell_owners = [PLAYER_TWO] * BOARD.cell_count
+        cell_owners[center] = PLAYER_ONE
+        for cell in spokes:
+            cell_owners[cell] = EMPTY
+        tracker = ComponentTracker(cell_owners=cell_owners)
+
+        self.assertEqual(tracker.reachable_group_bounds(PLAYER_ONE), (4,))
+
     def test_claiming_occupied_cell_fails(self) -> None:
         tracker = ComponentTracker()
         center = BOARD.index(0, 0)

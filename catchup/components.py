@@ -219,6 +219,57 @@ class ComponentTracker:
             )
         )
 
+    def reachable_group_bounds(self, player: int) -> tuple[int, ...]:
+        """Return optimistic component-size bounds through own cells plus empty cells."""
+
+        self._require_player(player)
+        nodes = {
+            ("claimed", root)
+            for root in self.roots[player]
+        }
+        nodes.update(
+            ("empty", root)
+            for root in self.empty_component_cells
+        )
+
+        def neighbor_components(node: tuple[str, int]) -> tuple[tuple[str, int], ...]:
+            kind, root = node
+            if kind == "claimed":
+                return tuple(
+                    ("empty", empty_root)
+                    for empty_root in self.claimed_adjacent_empty[player].get(root, ())
+                )
+            return tuple(
+                ("claimed", claimed_root)
+                for claimed_root in self.empty_adjacency[root][player]
+            )
+
+        visited: set[tuple[str, int]] = set()
+        bounds: list[int] = []
+        for node in nodes:
+            if node in visited:
+                continue
+
+            reachable_size = 0
+            stack = [node]
+            visited.add(node)
+            while stack:
+                current = stack.pop()
+                kind, root = current
+                if kind == "claimed":
+                    reachable_size += self.sizes[player][root]
+                else:
+                    reachable_size += len(self.empty_component_cells[root])
+
+                for linked_node in neighbor_components(current):
+                    if linked_node not in visited:
+                        visited.add(linked_node)
+                        stack.append(linked_node)
+
+            bounds.append(reachable_size)
+
+        return tuple(sorted(bounds, reverse=True))
+
     def _union(self, player: int, first: int, second: int) -> int:
         first_root = self._find(player, first)
         second_root = self._find(player, second)

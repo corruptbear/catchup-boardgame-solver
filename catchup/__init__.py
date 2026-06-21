@@ -3,6 +3,7 @@
 from .board import BOARD, Board
 from .components import ComponentTracker, EmptyComponent
 from .game import EMPTY, FINISH, PLAYER_ONE, PLAYER_TWO, GameState
+from .solvers import RandomPlayer, random_playout
 
 __all__ = [
     "BOARD",
@@ -14,4 +15,6 @@ __all__ = [
     "GameState",
     "PLAYER_ONE",
     "PLAYER_TWO",
+    "RandomPlayer",
+    "random_playout",
 ]

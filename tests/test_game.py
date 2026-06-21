@@ -1,7 +1,7 @@
 import unittest
 
 from catchup.board import BOARD
-from catchup.components import PLAYER_ONE, PLAYER_TWO
+from catchup.components import EMPTY, PLAYER_ONE, PLAYER_TWO, ComponentTracker
 from catchup.game import FINISH, GameState, compare_size_vectors
 
 
@@ -78,6 +78,26 @@ class GameStateTest(unittest.TestCase):
         self.assertEqual(state.winner(), PLAYER_ONE)
         self.assertEqual(state.result_for(PLAYER_ONE), 1)
         self.assertEqual(state.result_for(PLAYER_TWO), -1)
+
+    def test_reachable_bounds_can_prove_early_winner(self) -> None:
+        cell_owners = [PLAYER_ONE] * BOARD.cell_count
+        cell_owners[0] = PLAYER_TWO
+        cell_owners[1] = EMPTY
+        state = GameState(tracker=ComponentTracker(cell_owners=cell_owners))
+
+        self.assertGreater(state.tracker.empty_count(), 0)
+        self.assertEqual(state.proven_winner(), PLAYER_ONE)
+        self.assertTrue(state.is_terminal())
+        self.assertEqual(state.legal_actions(), ())
+        self.assertEqual(state.winner(), PLAYER_ONE)
+
+    def test_reachable_bounds_do_not_stop_during_partial_turn(self) -> None:
+        state = GameState.new().apply_action(0).apply_action(1)
+
+        self.assertEqual(state.selected, (1,))
+        self.assertIsNone(state.proven_winner())
+        self.assertFalse(state.is_terminal())
+        self.assertIn(FINISH, state.legal_actions())
 
     def test_compare_size_vectors_uses_later_groups_as_tie_breakers(self) -> None:
         self.assertGreater(compare_size_vectors((5, 3), (5, 2, 2)), 0)
