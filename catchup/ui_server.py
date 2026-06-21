@@ -49,6 +49,16 @@ def state_payload(state: GameState, message: str = "") -> dict[str, Any]:
         "current_player_name": PLAYER_NAMES[state.current_player],
         "completed_turns": state.completed_turns,
         "empty_count": state.tracker.empty_count(),
+        "empty_components": [
+            {
+                "root": component.root,
+                "size": component.size,
+                "cells": component.cells,
+                "blue": _claimed_component_refs(state, PLAYER_ONE, component.blue_roots),
+                "white": _claimed_component_refs(state, PLAYER_TWO, component.white_roots),
+            }
+            for component in state.tracker.empty_components()
+        ],
         "finish_action": FINISH,
         "legal_actions": legal_actions,
         "max_claims": state.max_claims,
@@ -75,6 +85,20 @@ def state_payload(state: GameState, message: str = "") -> dict[str, Any]:
     }
 
 
+def _claimed_component_refs(
+    state: GameState,
+    player: int,
+    roots: tuple[int, ...],
+) -> list[dict[str, int]]:
+    return [
+        {
+            "root": root,
+            "size": state.tracker.sizes[player][root],
+        }
+        for root in roots
+    ]
+
+
 def ui_legal_actions(state: GameState) -> tuple[int, ...]:
     """Return legal browser clicks, hiding canonical-order internals.
 
@@ -89,11 +113,7 @@ def ui_legal_actions(state: GameState) -> tuple[int, ...]:
         return engine_actions
 
     actions = [FINISH]
-    actions.extend(
-        cell
-        for cell in range(state.board.cell_count)
-        if state.tracker.is_empty(cell)
-    )
+    actions.extend(sorted(state.tracker.empty_cells))
     return tuple(actions)
 
 

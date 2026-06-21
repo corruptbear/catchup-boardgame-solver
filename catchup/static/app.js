@@ -15,6 +15,8 @@ const blueLargest = document.querySelector("#blue-largest");
 const whiteLargest = document.querySelector("#white-largest");
 const blueGroups = document.querySelector("#blue-groups");
 const whiteGroups = document.querySelector("#white-groups");
+const emptySummary = document.querySelector("#empty-summary");
+const emptyRegions = document.querySelector("#empty-regions");
 const message = document.querySelector("#message");
 
 const cellSize = 34;
@@ -142,6 +144,45 @@ function renderGroups(container, sizes) {
   }
 }
 
+function formatCells(cells) {
+  return cells.map((cell) => `#${cell}`).join(" ");
+}
+
+function formatBoundaries(components) {
+  if (components.length === 0) return "none";
+  return components.map((component) => `#${component.root}(${component.size})`).join(" ");
+}
+
+function renderEmptyRegions() {
+  emptySummary.textContent = `${state.empty_components.length} region${state.empty_components.length === 1 ? "" : "s"}`;
+  emptyRegions.replaceChildren();
+
+  for (const region of state.empty_components) {
+    const wrapper = document.createElement("div");
+    const title = document.createElement("div");
+    const root = document.createElement("span");
+    const size = document.createElement("span");
+    const cells = document.createElement("div");
+    const blue = document.createElement("div");
+    const white = document.createElement("div");
+
+    wrapper.className = "empty-region";
+    title.className = "region-title";
+    root.textContent = `Root #${region.root}`;
+    size.textContent = `size ${region.size}`;
+    cells.className = "region-cells";
+    cells.textContent = formatCells(region.cells);
+    blue.className = "boundary-row";
+    blue.innerHTML = `<strong>Blue:</strong> ${formatBoundaries(region.blue)}`;
+    white.className = "boundary-row";
+    white.innerHTML = `<strong>White:</strong> ${formatBoundaries(region.white)}`;
+
+    title.append(root, size);
+    wrapper.append(title, cells, blue, white);
+    emptyRegions.append(wrapper);
+  }
+}
+
 function renderStats() {
   const blue = state.players.find((player) => player.id === PLAYER_ONE);
   const white = state.players.find((player) => player.id === PLAYER_TWO);
@@ -160,6 +201,7 @@ function renderStats() {
 
   renderGroups(blueGroups, blue.group_sizes);
   renderGroups(whiteGroups, white.group_sizes);
+  renderEmptyRegions();
 
   finishButton.disabled = !state.legal_actions.includes(state.finish_action);
 }

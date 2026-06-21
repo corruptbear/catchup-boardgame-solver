@@ -21,6 +21,18 @@ class UiServerTest(unittest.TestCase):
         self.assertEqual(players[PLAYER_TWO]["group_sizes"], (2,))
         self.assertEqual(players[PLAYER_TWO]["largest_group"], 2)
 
+    def test_state_payload_includes_empty_component_boundaries(self) -> None:
+        state = GameState.new().apply_action(30)
+
+        payload = state_payload(state)
+
+        self.assertEqual(len(payload["empty_components"]), 1)
+        region = payload["empty_components"][0]
+        self.assertEqual(region["size"], 60)
+        self.assertNotIn(30, region["cells"])
+        self.assertEqual(region["blue"], [{"root": 30, "size": 1}])
+        self.assertEqual(region["white"], [])
+
     def test_session_action_reset_and_undo(self) -> None:
         session = GameSession()
 

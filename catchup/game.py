@@ -58,8 +58,8 @@ class GameState:
             min_cell = self.selected[-1] + 1 if self.selected else 0
             actions.extend(
                 cell
-                for cell in range(min_cell, self.board.cell_count)
-                if self.tracker.is_empty(cell)
+                for cell in sorted(self.tracker.empty_cells)
+                if cell >= min_cell
             )
 
         return tuple(actions)

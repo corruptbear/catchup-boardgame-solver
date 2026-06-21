@@ -193,6 +193,43 @@ dd {
   color: #575037;
 }
 
+.empty-regions {
+  display: grid;
+  gap: 8px;
+  max-height: 250px;
+  overflow: auto;
+}
+
+.empty-region {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.region-title {
+  display: flex;
+  font-size: 13px;
+  font-weight: 800;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.region-cells,
+.boundary-row {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.region-cells {
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+.boundary-row strong {
+  color: var(--ink);
+}
+
 #message {
   color: var(--muted);
   font-size: 14px;

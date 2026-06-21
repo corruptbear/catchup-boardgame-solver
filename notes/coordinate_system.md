@@ -90,7 +90,7 @@ The incremental component tracker uses this table when a cell is claimed:
 
 ```python
 for neighbor in board.neighbors[cell]:
-    if owners[neighbor] == player:
+    if cell_owners[neighbor] == player:
         union(cell, neighbor)
 ```
 
