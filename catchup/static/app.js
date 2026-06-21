@@ -6,6 +6,10 @@ const board = document.querySelector("#board");
 const finishButton = document.querySelector("#finish-button");
 const undoButton = document.querySelector("#undo-button");
 const resetButton = document.querySelector("#reset-button");
+const suggestionButton = document.querySelector("#suggestion-button");
+const simulationInput = document.querySelector("#simulation-input");
+const suggestionOutput = document.querySelector("#suggestion-output");
+const suggestionChoices = document.querySelector("#suggestion-choices");
 const statusLine = document.querySelector("#status-line");
 const currentPlayer = document.querySelector("#current-player");
 const claimCount = document.querySelector("#claim-count");
@@ -22,6 +26,9 @@ const message = document.querySelector("#message");
 const cellSize = 34;
 const sqrt3 = Math.sqrt(3);
 let state = null;
+let suggestionText = "";
+let suggestionRows = [];
+let suggestionLoading = false;
 
 function centerFor(cell) {
   return {
@@ -62,18 +69,54 @@ async function postJson(url, body = {}) {
   const payload = await response.json();
   if (!response.ok) {
     state = payload.state;
+    suggestionText = "";
+    suggestionRows = [];
     render();
     message.textContent = payload.error;
     return;
   }
   state = payload;
+  suggestionText = "";
+  suggestionRows = [];
   render();
 }
 
 async function loadState() {
   const response = await fetch("/api/state");
   state = await response.json();
+  suggestionText = "";
+  suggestionRows = [];
   render();
+}
+
+async function requestSuggestion() {
+  if (!state || state.terminal || suggestionLoading) return;
+
+  const requestedSimulations = Math.max(1, Number.parseInt(simulationInput.value, 10) || 1);
+  simulationInput.value = String(requestedSimulations);
+  suggestionLoading = true;
+  render();
+  try {
+    const response = await fetch("/api/suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ simulations: requestedSimulations }),
+    });
+    const payload = await response.json();
+    state = payload.state;
+    if (!response.ok) {
+      suggestionText = payload.error;
+      suggestionRows = [];
+      return;
+    }
+
+    const suggestion = payload.suggestion;
+    suggestionText = `${suggestion.player_name}: ${suggestion.label} (${suggestion.simulations} simulations)`;
+    suggestionRows = payload.choices;
+  } finally {
+    suggestionLoading = false;
+    render();
+  }
 }
 
 function renderBoard() {
@@ -183,6 +226,27 @@ function renderEmptyRegions() {
   }
 }
 
+function renderSuggestion() {
+  suggestionButton.disabled = state.terminal || suggestionLoading;
+  simulationInput.disabled = suggestionLoading;
+  suggestionOutput.textContent = suggestionLoading ? "Evaluating..." : suggestionText;
+  suggestionChoices.replaceChildren();
+
+  if (suggestionLoading || suggestionRows.length === 0) return;
+
+  for (const choice of suggestionRows.slice(0, 8)) {
+    const row = document.createElement("div");
+    const label = document.createElement("span");
+    const visits = document.createElement("span");
+
+    row.className = "suggestion-choice";
+    label.textContent = choice.label;
+    visits.textContent = `${choice.visits} visit${choice.visits === 1 ? "" : "s"}`;
+    row.append(label, visits);
+    suggestionChoices.append(row);
+  }
+}
+
 function renderStats() {
   const blue = state.players.find((player) => player.id === PLAYER_ONE);
   const white = state.players.find((player) => player.id === PLAYER_TWO);
@@ -202,6 +266,7 @@ function renderStats() {
   renderGroups(blueGroups, blue.group_sizes);
   renderGroups(whiteGroups, white.group_sizes);
   renderEmptyRegions();
+  renderSuggestion();
 
   finishButton.disabled = !state.legal_actions.includes(state.finish_action);
 }
@@ -215,4 +280,5 @@ function render() {
 finishButton.addEventListener("click", () => postJson("/api/action", { action: state.finish_action }));
 undoButton.addEventListener("click", () => postJson("/api/undo"));
 resetButton.addEventListener("click", () => postJson("/api/reset"));
+suggestionButton.addEventListener("click", () => requestSuggestion());
 loadState();

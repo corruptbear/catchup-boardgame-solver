@@ -48,6 +48,16 @@ button:not(:disabled):hover {
   border-color: var(--accent);
 }
 
+input {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  min-height: 36px;
+  padding: 0 10px;
+  width: 100%;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: minmax(660px, 1fr) 320px;
@@ -234,6 +244,56 @@ dd {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.4;
+}
+
+#suggestion-button {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.simulation-control {
+  display: grid;
+  gap: 6px;
+}
+
+.simulation-control span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+#suggestion-output {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+  margin-top: 10px;
+  min-height: 20px;
+}
+
+.suggestion-choices {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.suggestion-choice {
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  justify-content: space-between;
+  padding-top: 6px;
+}
+
+.suggestion-choice span:first-child {
+  font-weight: 750;
+}
+
+.suggestion-choice span:last-child {
+  color: var(--muted);
+  flex: 0 0 auto;
 }
 
 .cell polygon {

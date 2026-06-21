@@ -64,6 +64,17 @@
           <div class="empty-regions" id="empty-regions"></div>
         </section>
 
+        <section class="suggestion-panel">
+          <h2>Suggestion</h2>
+          <label class="simulation-control" for="simulation-input">
+            <span>Simulations</span>
+            <input id="simulation-input" type="number" min="1" step="1" value="100">
+          </label>
+          <button id="suggestion-button" type="button">Get suggested action</button>
+          <p id="suggestion-output"></p>
+          <div id="suggestion-choices" class="suggestion-choices"></div>
+        </section>
+
         <section class="message-panel">
           <h2>State</h2>
           <p id="message"></p>

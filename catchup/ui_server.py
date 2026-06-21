@@ -14,9 +14,11 @@ from typing import Any
 from .board import BOARD
 from .components import PLAYER_ONE, PLAYER_TWO
 from .game import FINISH, GameState
+from .solvers import MCTSPlayer
 
 
 STATIC_DIR = Path(__file__).with_name("static")
+SUGGESTION_SIMULATIONS = 100
 PLAYER_NAMES = {
     PLAYER_ONE: "Blue",
     PLAYER_TWO: "White",
@@ -117,6 +119,36 @@ def ui_legal_actions(state: GameState) -> tuple[int, ...]:
     return tuple(actions)
 
 
+def action_description(state: GameState, action: int) -> dict[str, Any]:
+    """Return browser-facing details for one factored action."""
+
+    if action == FINISH:
+        return {
+            "action": action,
+            "kind": "finish",
+            "label": "Finish turn",
+        }
+
+    state.board.require_cell(action)
+    q, r = state.board.coords[action]
+    return {
+        "action": action,
+        "kind": "claim",
+        "cell": action,
+        "q": q,
+        "r": r,
+        "label": f"Claim #{action} ({q},{r})",
+    }
+
+
+def choice_description(state: GameState, action: int, visits: int) -> dict[str, Any]:
+    """Return one MCTS root choice with its visit count."""
+
+    choice = action_description(state, action)
+    choice["visits"] = visits
+    return choice
+
+
 class GameSession:
     """Server-side state for one local self-play board."""
 
@@ -169,6 +201,33 @@ class GameSession:
                 self._message = "Nothing to undo."
             return state_payload(self._state, self._message)
 
+    def suggest_action(self, simulations: int = SUGGESTION_SIMULATIONS) -> dict[str, Any]:
+        with self._lock:
+            state = self._state.copy()
+
+        player = MCTSPlayer(simulations=simulations)
+        root = player.search(state)
+        choices = sorted(
+            (
+                choice_description(state, action, child.visits)
+                for action, child in root.children.items()
+            ),
+            key=lambda choice: (-choice["visits"], choice["action"]),
+        )
+        action = choices[0]["action"]
+        suggestion = action_description(state, action)
+        suggestion["player"] = state.current_player
+        suggestion["player_name"] = PLAYER_NAMES[state.current_player]
+        suggestion["simulations"] = simulations
+
+        with self._lock:
+            payload = state_payload(self._state, self._message)
+        return {
+            "state": payload,
+            "suggestion": suggestion,
+            "choices": choices,
+        }
+
     def _can_apply_out_of_order_cell(self, action: int) -> bool:
         if action == FINISH or not self._state.selected:
             return False
@@ -218,13 +277,17 @@ class CatchupRequestHandler(BaseHTTPRequestHandler):
             if self.path == "/api/action":
                 data = self._read_json()
                 self._send_json(self.session.apply_action(int(data["action"])))
+            elif self.path == "/api/suggest":
+                data = self._read_json()
+                simulations = int(data.get("simulations", SUGGESTION_SIMULATIONS))
+                self._send_json(self.session.suggest_action(simulations))
             elif self.path == "/api/reset":
                 self._send_json(self.session.reset())
             elif self.path == "/api/undo":
                 self._send_json(self.session.undo())
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
-        except (KeyError, TypeError, ValueError) as exc:
+        except (KeyError, TypeError, ValueError, RuntimeError) as exc:
             self._send_json({"error": str(exc), "state": self.session.payload()}, HTTPStatus.BAD_REQUEST)
 
     def log_message(self, format: str, *args: Any) -> None:
