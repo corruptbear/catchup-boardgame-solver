@@ -5,9 +5,12 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Protocol, TypeAlias
 
 from .game import GameState
+
+
+StateKey: TypeAlias = tuple[tuple[int, ...], int, tuple[int, ...], int, int, bool]
 
 
 class ActionPlayer(Protocol):
@@ -64,6 +67,8 @@ class MCTSPlayer:
     rng: random.Random = field(default_factory=random.Random)
     rollout_player: ActionPlayer | None = None
     max_rollout_actions: int | None = None
+    use_transposition_table: bool = True
+    last_transposition_table_size: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if self.simulations <= 0:
@@ -95,28 +100,40 @@ class MCTSPlayer:
         if state.is_terminal():
             raise ValueError("cannot search from a terminal state")
 
-        root = MCTSNode(state.copy())
+        table: dict[StateKey, MCTSNode] | None = None
+        root_state = state.copy()
+        if self.use_transposition_table:
+            table = {}
+            root = self._node_for_state(root_state, table)
+        else:
+            root = MCTSNode(root_state)
+
         for _ in range(self.simulations):
-            node = self._select_and_expand(root)
-            terminal_state = self._rollout(node.state)
-            self._backpropagate(node, terminal_state)
+            path = self._select_and_expand(root, table)
+            terminal_state = self._rollout(path[-1].state)
+            self._backpropagate(path, terminal_state)
+
+        self.last_transposition_table_size = len(table) if table is not None else 0
         return root
 
-    def _select_and_expand(self, node: MCTSNode) -> MCTSNode:
+    def _select_and_expand(
+        self,
+        node: MCTSNode,
+        table: dict[StateKey, MCTSNode] | None,
+    ) -> list[MCTSNode]:
+        path = [node]
         while not node.state.is_terminal() and not node.untried_actions and node.children:
             node = self._select_child(node)
+            path.append(node)
 
         if node.state.is_terminal() or not node.untried_actions:
-            return node
+            return path
 
         action = self._pop_random_untried_action(node)
-        child = MCTSNode(
-            state=node.state.apply_action(action),
-            parent=node,
-            action_from_parent=action,
-        )
+        child = self._child_for_action(node, action, table)
         node.children[action] = child
-        return child
+        path.append(child)
+        return path
 
     def _select_child(self, node: MCTSNode) -> MCTSNode:
         parent_visits = max(node.visits, 1)
@@ -152,11 +169,10 @@ class MCTSPlayer:
         )
 
     @staticmethod
-    def _backpropagate(node: MCTSNode, terminal_state: GameState) -> None:
-        while node is not None:
+    def _backpropagate(path: list[MCTSNode], terminal_state: GameState) -> None:
+        for node in reversed(path):
             node.visits += 1
             node.total_value += terminal_state.result_for(node.state.current_player)
-            node = node.parent
 
     def _best_root_action(self, root: MCTSNode) -> int:
         best_score = None
@@ -176,6 +192,49 @@ class MCTSPlayer:
     def _pop_random_untried_action(self, node: MCTSNode) -> int:
         index = self.rng.randrange(len(node.untried_actions))
         return node.untried_actions.pop(index)
+
+    def _child_for_action(
+        self,
+        node: MCTSNode,
+        action: int,
+        table: dict[StateKey, MCTSNode] | None,
+    ) -> MCTSNode:
+        child_state = node.state.apply_action(action)
+        if table is None:
+            return MCTSNode(
+                state=child_state,
+                parent=node,
+                action_from_parent=action,
+            )
+
+        child = self._node_for_state(child_state, table)
+        if child.parent is None:
+            child.parent = node
+            child.action_from_parent = action
+        return child
+
+    @staticmethod
+    def _node_for_state(
+        state: GameState,
+        table: dict[StateKey, MCTSNode],
+    ) -> MCTSNode:
+        key = MCTSPlayer._state_key(state)
+        node = table.get(key)
+        if node is None:
+            node = MCTSNode(state)
+            table[key] = node
+        return node
+
+    @staticmethod
+    def _state_key(state: GameState) -> StateKey:
+        return (
+            tuple(state.tracker.cell_owners),
+            state.current_player,
+            state.selected,
+            state.max_claims,
+            state.turn_start_largest,
+            state.opening_turn,
+        )
 
     @staticmethod
     def _mean_value_for_player(node: MCTSNode, player: int) -> float:

@@ -1,7 +1,7 @@
 import unittest
 
 from catchup.board import BOARD
-from catchup.game import GameState
+from catchup.game import FINISH, GameState
 from catchup.solvers import MCTSPlayer, RandomPlayer, random_playout
 
 
@@ -87,6 +87,50 @@ class MCTSPlayerTest(unittest.TestCase):
             self.assertEqual(child.action_from_parent, action)
             self.assertIs(child.parent, root)
             self.assertGreater(child.visits, 0)
+        self.assertGreaterEqual(player.last_transposition_table_size, len(root.children) + 1)
+
+    def test_transposition_table_reuses_equivalent_state_nodes(self) -> None:
+        state = GameState.new().apply_action(20)
+        player = MCTSPlayer.with_seed(3, simulations=1)
+        table = {}
+
+        first = player._node_for_state(state.copy(), table)
+        second = player._node_for_state(state.copy(), table)
+
+        self.assertIs(first, second)
+        self.assertEqual(len(table), 1)
+
+    def test_transposition_key_uses_state_values_not_object_identity(self) -> None:
+        first_state = (
+            GameState.new()
+            .apply_action(0)
+            .apply_action(1)
+            .apply_action(FINISH)
+            .apply_action(2)
+            .apply_action(FINISH)
+        )
+        second_state = (
+            GameState.new()
+            .apply_action(2)
+            .apply_action(1)
+            .apply_action(FINISH)
+            .apply_action(0)
+            .apply_action(FINISH)
+        )
+        player = MCTSPlayer.with_seed(3, simulations=1)
+        table = {}
+
+        self.assertIsNot(first_state, second_state)
+        self.assertEqual(
+            first_state.tracker.cell_owners,
+            second_state.tracker.cell_owners,
+        )
+        self.assertEqual(player._state_key(first_state), player._state_key(second_state))
+        self.assertIs(
+            player._node_for_state(first_state, table),
+            player._node_for_state(second_state, table),
+        )
+        self.assertEqual(len(table), 1)
 
     def test_mcts_is_reproducible_with_seed(self) -> None:
         state = GameState.new().apply_action(20)

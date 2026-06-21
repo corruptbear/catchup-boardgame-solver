@@ -5,14 +5,20 @@ supports faster search and makes early-win upper bounds easier to compute later.
 
 ## Claimed Components
 
-Claimed cells are tracked separately for each player with union-find:
+Claimed cells are tracked with one union-find forest:
 
 ```python
-parents[player][cell] -> parent cell
-sizes[player][root] -> component size
+parents[cell] -> parent cell, or -1 if empty
+sizes[root] -> component size
 roots[player] -> set[root]
-component_members[player][root] -> immutable linked membership tree
+size_histogram[player][size] -> number of this player's active groups of size
+max_group_size[player] -> largest active group size
 ```
+
+`cell_owners[cell]` identifies which player owns a claimed cell, so `parents`
+and `sizes` do not need a player dimension. `roots[player]` is kept for scoring
+and boundary updates. `size_histogram` makes score-vector rebuilds avoid sorting
+component roots.
 
 When a player claims a cell:
 
@@ -29,24 +35,32 @@ only one component remains.
 Empty cells are tracked as connected regions:
 
 ```python
-empty_cells -> set[cell]
+cell_owners[cell] == EMPTY -> True if the cell is empty
+_empty_count -> number of empty cells
 empty_component_of[cell] -> empty region root, or -1
 empty_component_cells[root] -> set[cell]
 ```
 
-When a cell is claimed, it is removed from `empty_cells`. The old empty region
-that contained that cell may split, so the tracker runs:
+When a cell is claimed, `cell_owners[cell]` is changed from `EMPTY` to the
+claiming player and `_empty_count` is decremented. The old empty region that
+contained that cell may split, so the tracker runs:
 
 ```python
 _split_empty_region_after_claim(old_empty_root, claimed_cell)
 ```
 
-That method:
+That method first flood-fills the old region's remaining cells to see whether
+the claim actually split the region. If all remaining cells are still connected
+and the old root cell was not claimed, the tracker keeps the existing empty
+region record and only refreshes its boundary links.
+
+When the empty region vanishes, splits, or needs a new root because the old root
+cell was claimed, the method:
 
 1. Unregisters the old empty region.
-2. Removes the claimed cell from that region's cell set.
-3. Flood-fills the remaining cells into replacement empty regions.
-4. Registers each replacement region.
+2. Registers the already flood-filled first replacement region.
+3. Flood-fills any remaining cells into additional replacement regions.
+4. Registers each additional replacement region.
 
 Only the old empty region is rebuilt. Unrelated empty regions are not scanned.
 
@@ -55,13 +69,13 @@ Only the old empty region is rebuilt. Unrelated empty regions are not scanned.
 Each empty region also tracks which claimed components touch it:
 
 ```python
-empty_adjacency[empty_root][player] -> set[claimed_component_root]
+empty_adjacency[empty_root][player] -> set[touching_claimed_root]
 ```
 
 There is also a reverse map:
 
 ```python
-claimed_adjacent_empty[player][claimed_root] -> set[empty_region_root]
+claimed_adjacent_empty[player][touching_claimed_root] -> set[empty_region_root]
 ```
 
 This lets an empty region answer:
@@ -71,9 +85,8 @@ This lets an empty region answer:
 
 The UI displays this as `#root(size)` for each adjacent claimed group.
 
-If claimed components merge, the tracker links their membership trees and updates
-empty-region boundary references from the merged claimed root to the remaining
-root.
+If claimed components merge, the tracker updates empty-region boundary
+references from the merged claimed root to the remaining root.
 
 ## Operation Costs
 
@@ -100,21 +113,27 @@ empty_component_of[cell]     O(1)
 Claimed components:
 
 ```text
-_find(player, cell)           amortized O(alpha(n))
-group_sizes(player)           O(c log c)
-largest_group_size(player)    O(c)
-components(player)            O(c log c + output size)
+_find(cell)                   amortized O(alpha(n))
+group_sizes(player)           O(m + c)
+largest_group_size(player)    O(1)
+components(player)            O(n * alpha(n) + c log c + output size)
 ```
 
-`_union(player, first, second)` is more expensive than plain union-find because
-the tracker also maintains empty-region boundary data.
+Here `m` is `max_group_size[player]`, at most `n`. `group_sizes(player)` scans
+the size histogram downward and emits each size according to its count, so it no
+longer sorts roots.
+
+`_union(player, first, second)` still takes `player` because it updates
+`roots[player]` and that player's boundary references, but the underlying
+union-find arrays are playerless. It is more expensive than plain union-find
+because the tracker also maintains empty-region boundary data.
 
 It does:
 
 1. Find the two current claimed-component roots.
 2. Attach the smaller claimed component to the larger one.
-3. Link the two claimed-component membership trees. This keeps access to all
-   cells without moving them during the union.
+3. Decrement the two old component-size histogram counts and increment the
+   merged-size count.
 4. Update every empty region that used to reference the merged claimed root
    so it now references the remaining claimed root.
 
@@ -125,12 +144,12 @@ _union(...)  O(alpha(n) + m)
 ```
 
 Example: if Blue group root `12` is merged into Blue group root `21`, and root
-`12` touched empty regions `{0, 35}`, the union links root `12`'s membership
-tree under root `21` and updates 2 empty-region references. It does not copy all
-cells from root `12` into a new set.
+`12` touched empty regions `{0, 35}`, the union updates 2 empty-region
+references. It does not maintain any cell-list metadata for inspection.
 
-`components(player)` materializes component cells by walking each membership
-tree when inspection/debug output needs actual cell lists.
+`components(player)` is inspection/debug output, not an MCTS hot-path method. It
+materializes component cells on demand by scanning `cell_owners` and finding the
+root for each of that player's cells.
 
 Empty regions:
 
@@ -140,18 +159,22 @@ _split_empty_region_after_claim(...)  O(k * d * alpha(n) + r)
 ```
 
 `_split_empty_region_after_claim(old_empty_root, claimed_cell)` only rebuilds
-the old empty region that contained the claimed cell.
+the old empty region that contained the claimed cell, and avoids a full metadata
+rebuild when the old region stays connected with the same root.
 
 It does:
 
-1. Remove the old empty-region record.
-2. Remove the newly claimed cell from that region's cell set.
-3. Flood-fill the remaining cells in that old region to find the replacement
-   empty regions.
-4. For each replacement region, collect neighboring claimed Blue/White component
-   roots.
-5. Update reverse links from those claimed component roots back to the new empty
+1. Flood-fill the remaining cells in the old region.
+2. If there is no split and the old root is still empty, remove only the claimed
+   cell and refresh that region's boundary links.
+3. Otherwise remove the old empty-region record.
+4. Register the replacement empty region or regions.
+5. Update reverse links from the touching claimed component roots back to the new empty
    region roots.
+
+The flood-fill collects each replacement region's touching claimed-component
+roots while it walks the empty cells, so replacement registration does not scan
+the same cells a second time just to compute adjacency.
 
 Here `r` is the number of claimed-component/empty-region links removed and
 created during that split. For example, if the old empty region touched 2 Blue

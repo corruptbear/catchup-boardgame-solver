@@ -9,6 +9,7 @@ from .components import EMPTY, PLAYER_ONE, PLAYER_TWO, PLAYERS, ComponentTracker
 
 
 FINISH = BOARD.cell_count
+EARLY_WIN_CHECK_MIN_FILLED_CELLS = 30
 
 
 @dataclass
@@ -56,11 +57,7 @@ class GameState:
 
         if len(self.selected) < self.max_claims:
             min_cell = self.selected[-1] + 1 if self.selected else 0
-            actions.extend(
-                cell
-                for cell in sorted(self.tracker.empty_cells)
-                if cell >= min_cell
-            )
+            actions.extend(self.tracker.empty_cell_indices(min_cell))
 
         return tuple(actions)
 
@@ -96,7 +93,12 @@ class GameState:
     def is_terminal(self) -> bool:
         if self.selected:
             return False
-        return self.tracker.empty_count() == 0 or self.proven_winner() is not None
+        empty_count = self.tracker.empty_count()
+        if empty_count == 0:
+            return True
+        if self.board.cell_count - empty_count < EARLY_WIN_CHECK_MIN_FILLED_CELLS:
+            return False
+        return self.proven_winner() is not None
 
     def group_sizes(self, player: int) -> tuple[int, ...]:
         return self.tracker.group_sizes(player)
@@ -104,7 +106,11 @@ class GameState:
     def proven_winner(self) -> int | None:
         """Return a winner only when reachable-region bounds prove the result."""
 
-        if self.selected:
+        if (
+            self.selected
+            or self.board.cell_count - self.tracker.empty_count()
+            < EARLY_WIN_CHECK_MIN_FILLED_CELLS
+        ):
             return None
 
         blue_sizes = self.tracker.group_sizes(PLAYER_ONE)

@@ -2,7 +2,7 @@ import unittest
 
 from catchup.board import BOARD
 from catchup.components import EMPTY, PLAYER_ONE, PLAYER_TWO, ComponentTracker
-from catchup.game import FINISH, GameState, compare_size_vectors
+from catchup.game import EARLY_WIN_CHECK_MIN_FILLED_CELLS, FINISH, GameState, compare_size_vectors
 
 
 class GameStateTest(unittest.TestCase):
@@ -83,13 +83,30 @@ class GameStateTest(unittest.TestCase):
         cell_owners = [PLAYER_ONE] * BOARD.cell_count
         cell_owners[0] = PLAYER_TWO
         cell_owners[1] = EMPTY
-        state = GameState(tracker=ComponentTracker(cell_owners=cell_owners))
+        state = GameState(
+            tracker=ComponentTracker(cell_owners=cell_owners),
+        )
 
         self.assertGreater(state.tracker.empty_count(), 0)
+        self.assertGreaterEqual(
+            BOARD.cell_count - state.tracker.empty_count(),
+            EARLY_WIN_CHECK_MIN_FILLED_CELLS,
+        )
         self.assertEqual(state.proven_winner(), PLAYER_ONE)
         self.assertTrue(state.is_terminal())
         self.assertEqual(state.legal_actions(), ())
         self.assertEqual(state.winner(), PLAYER_ONE)
+
+    def test_reachable_bounds_are_skipped_before_minimum_filled_cells(self) -> None:
+        cell_owners = [EMPTY] * BOARD.cell_count
+        filled_cells = EARLY_WIN_CHECK_MIN_FILLED_CELLS - 1
+        for cell in range(filled_cells):
+            cell_owners[cell] = PLAYER_ONE
+        state = GameState(tracker=ComponentTracker(cell_owners=cell_owners))
+
+        self.assertEqual(BOARD.cell_count - state.tracker.empty_count(), filled_cells)
+        self.assertIsNone(state.proven_winner())
+        self.assertFalse(state.is_terminal())
 
     def test_reachable_bounds_do_not_stop_during_partial_turn(self) -> None:
         state = GameState.new().apply_action(0).apply_action(1)

@@ -95,7 +95,7 @@ def _claimed_component_refs(
     return [
         {
             "root": root,
-            "size": state.tracker.sizes[player][root],
+            "size": state.tracker.sizes[root],
         }
         for root in roots
     ]
@@ -115,7 +115,7 @@ def ui_legal_actions(state: GameState) -> tuple[int, ...]:
         return engine_actions
 
     actions = [FINISH]
-    actions.extend(sorted(state.tracker.empty_cells))
+    actions.extend(state.tracker.empty_cell_indices())
     return tuple(actions)
 
 

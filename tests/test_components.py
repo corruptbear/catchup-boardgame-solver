@@ -4,11 +4,6 @@ from catchup.board import BOARD
 from catchup.components import EMPTY, PLAYER_ONE, PLAYER_TWO, ComponentTracker
 
 
-class NonIterableCellOwners(list):
-    def __iter__(self):
-        raise AssertionError("components() should not scan cell_owners")
-
-
 class ComponentTrackerTest(unittest.TestCase):
     def test_claim_merges_adjacent_same_color_cells(self) -> None:
         tracker = ComponentTracker()
@@ -71,13 +66,31 @@ class ComponentTrackerTest(unittest.TestCase):
         self.assertEqual(len(tracker.roots[PLAYER_ONE]), 1)
         self.assertEqual(tracker.components(PLAYER_ONE)[0].cells, tuple(sorted((*spokes, bridge))))
 
-    def test_components_uses_incremental_membership_not_owner_scan(self) -> None:
+    def test_group_size_histogram_updates_across_claims_merges_and_copy(self) -> None:
+        tracker = ComponentTracker()
+        left = BOARD.index(-1, 0)
+        bridge = BOARD.index(0, 0)
+        right = BOARD.index(1, 0)
+
+        tracker.claim(PLAYER_ONE, left)
+        tracker.claim(PLAYER_ONE, right)
+        clone = tracker.copy()
+        clone.claim(PLAYER_ONE, bridge)
+
+        self.assertEqual(tracker.group_sizes(PLAYER_ONE), (1, 1))
+        self.assertEqual(tracker.size_histogram[PLAYER_ONE][1], 2)
+        self.assertEqual(tracker.max_group_size[PLAYER_ONE], 1)
+        self.assertEqual(clone.group_sizes(PLAYER_ONE), (3,))
+        self.assertEqual(clone.size_histogram[PLAYER_ONE][1], 0)
+        self.assertEqual(clone.size_histogram[PLAYER_ONE][3], 1)
+        self.assertEqual(clone.max_group_size[PLAYER_ONE], 3)
+
+    def test_components_computes_inspection_cells_on_demand(self) -> None:
         tracker = ComponentTracker()
         center = BOARD.index(0, 0)
         neighbor = BOARD.index(1, 0)
         tracker.claim(PLAYER_ONE, center)
         tracker.claim(PLAYER_ONE, neighbor)
-        tracker.cell_owners = NonIterableCellOwners(tracker.cell_owners)
 
         components = tracker.components(PLAYER_ONE)
 
@@ -110,12 +123,14 @@ class ComponentTrackerTest(unittest.TestCase):
 
         self.assertEqual(tracker.empty_count(), BOARD.cell_count - 2)
         self.assertEqual(clone.empty_count(), BOARD.cell_count - 3)
-        self.assertNotIn(center, tracker.empty_cells)
-        self.assertNotIn(neighbor, tracker.empty_cells)
-        self.assertIn(next_cell, tracker.empty_cells)
-        self.assertNotIn(next_cell, clone.empty_cells)
+        self.assertEqual(tracker._empty_count, BOARD.cell_count - 2)
+        self.assertEqual(clone._empty_count, BOARD.cell_count - 3)
+        self.assertFalse(tracker.is_empty(center))
+        self.assertFalse(tracker.is_empty(neighbor))
+        self.assertTrue(tracker.is_empty(next_cell))
+        self.assertFalse(clone.is_empty(next_cell))
 
-    def test_empty_cells_initializes_from_existing_cell_owners(self) -> None:
+    def test_empty_count_initializes_from_existing_cell_owners(self) -> None:
         cell_owners = [EMPTY] * BOARD.cell_count
         cell_owners[0] = PLAYER_ONE
         cell_owners[1] = PLAYER_TWO
@@ -123,9 +138,19 @@ class ComponentTrackerTest(unittest.TestCase):
         tracker = ComponentTracker(cell_owners=cell_owners)
 
         self.assertEqual(tracker.empty_count(), BOARD.cell_count - 2)
-        self.assertNotIn(0, tracker.empty_cells)
-        self.assertNotIn(1, tracker.empty_cells)
-        self.assertIn(2, tracker.empty_cells)
+        self.assertEqual(tracker._empty_count, BOARD.cell_count - 2)
+        self.assertFalse(tracker.is_empty(0))
+        self.assertFalse(tracker.is_empty(1))
+        self.assertTrue(tracker.is_empty(2))
+
+    def test_empty_cell_indices_iterates_cell_owners_in_increasing_order(self) -> None:
+        tracker = ComponentTracker()
+        tracker.claim(PLAYER_ONE, 0)
+        tracker.claim(PLAYER_TWO, 2)
+
+        self.assertEqual(tracker.empty_cell_indices(0)[:3], (1, 3, 4))
+        self.assertEqual(tracker.empty_cell_indices(3)[:3], (3, 4, 5))
+        self.assertEqual(tracker.empty_cell_indices(BOARD.cell_count), ())
 
     def test_existing_cell_owners_rebuilds_claimed_components_before_empty_boundaries(self) -> None:
         cell_owners = [EMPTY] * BOARD.cell_count
@@ -145,7 +170,7 @@ class ComponentTrackerTest(unittest.TestCase):
         self.assertEqual(tracker.group_sizes(PLAYER_ONE), (2,))
         self.assertEqual(tracker.components(PLAYER_ONE)[0].cells, tuple(sorted(blue_cells)))
         self.assertEqual(len(empty_blue_roots), 1)
-        self.assertEqual(tracker.sizes[PLAYER_ONE][next(iter(empty_blue_roots))], 2)
+        self.assertEqual(tracker.sizes[next(iter(empty_blue_roots))], 2)
 
     def test_empty_components_initially_track_whole_board(self) -> None:
         tracker = ComponentTracker()
@@ -157,6 +182,37 @@ class ComponentTrackerTest(unittest.TestCase):
         self.assertEqual(regions[0].cells, tuple(range(BOARD.cell_count)))
         self.assertEqual(regions[0].blue_roots, ())
         self.assertEqual(regions[0].white_roots, ())
+
+    def test_empty_region_keeps_metadata_when_claim_does_not_split_it(self) -> None:
+        tracker = ComponentTracker()
+        old_root = tracker.empty_components()[0].root
+        center = BOARD.index(0, 0)
+
+        tracker.claim(PLAYER_ONE, center)
+        regions = tracker.empty_components()
+
+        self.assertEqual(len(regions), 1)
+        self.assertEqual(regions[0].root, old_root)
+        self.assertEqual(regions[0].size, BOARD.cell_count - 1)
+        self.assertEqual(tracker.empty_component_of[center], -1)
+        self.assertEqual(tracker.claimed_adjacent_empty[PLAYER_ONE][center], {old_root})
+
+    def test_empty_region_gets_new_root_when_claimed_cell_was_old_root(self) -> None:
+        tracker = ComponentTracker()
+        old_root = tracker.empty_components()[0].root
+
+        tracker.claim(PLAYER_ONE, old_root)
+        regions = tracker.empty_components()
+
+        self.assertEqual(len(regions), 1)
+        self.assertEqual(regions[0].size, BOARD.cell_count - 1)
+        self.assertNotEqual(regions[0].root, old_root)
+        self.assertEqual(regions[0].root, min(regions[0].cells))
+        self.assertEqual(tracker.empty_component_of[old_root], -1)
+        self.assertEqual(
+            tracker.claimed_adjacent_empty[PLAYER_ONE][old_root],
+            {regions[0].root},
+        )
 
     def test_empty_region_splits_after_bridge_cell_claim(self) -> None:
         center = BOARD.index(0, 0)
