@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import random
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,6 +21,7 @@ from .solvers import MCTSPlayer
 
 STATIC_DIR = Path(__file__).with_name("static")
 SUGGESTION_SIMULATIONS = 100
+SUGGESTION_SEED_RNG = random.SystemRandom()
 PLAYER_NAMES = {
     PLAYER_ONE: "Blue",
     PLAYER_TWO: "White",
@@ -206,10 +208,11 @@ class GameSession:
         with self._lock:
             state = self._state.copy()
 
-        cpp_result = suggest_with_cpp_mcts(state, simulations)
+        seed = SUGGESTION_SEED_RNG.randrange(1, 2**63)
+        cpp_result = suggest_with_cpp_mcts(state, simulations, seed=seed)
         if cpp_result is None:
             engine = "python"
-            player = MCTSPlayer(simulations=simulations)
+            player = MCTSPlayer(simulations=simulations, rng=random.Random(seed))
             root = player.search(state)
             choices = sorted(
                 (
@@ -232,6 +235,7 @@ class GameSession:
         suggestion["player_name"] = PLAYER_NAMES[state.current_player]
         suggestion["simulations"] = simulations
         suggestion["engine"] = engine
+        suggestion["seed"] = seed
 
         with self._lock:
             payload = state_payload(self._state, self._message)

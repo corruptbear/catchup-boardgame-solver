@@ -75,6 +75,7 @@ class UiServerTest(unittest.TestCase):
         self.assertEqual(suggestion["player"], PLAYER_ONE)
         self.assertEqual(suggestion["player_name"], PLAYER_NAMES[PLAYER_ONE])
         self.assertEqual(suggestion["simulations"], 4)
+        self.assertIsInstance(suggestion["seed"], int)
         self.assertIn(suggestion["engine"], ("cpp/tracked", "python"))
         self.assertIn("Claim #", suggestion["label"])
         self.assertEqual(suggestion["action"], choices[0]["action"])
@@ -88,7 +89,7 @@ class UiServerTest(unittest.TestCase):
 
     def test_session_suggest_action_falls_back_to_python_mcts(self) -> None:
         original = ui_server.suggest_with_cpp_mcts
-        ui_server.suggest_with_cpp_mcts = lambda state, simulations: None
+        ui_server.suggest_with_cpp_mcts = lambda state, simulations, seed=1: None
         try:
             payload = GameSession().suggest_action(simulations=4)
         finally:
@@ -96,6 +97,30 @@ class UiServerTest(unittest.TestCase):
 
         self.assertEqual(payload["suggestion"]["engine"], "python")
         self.assertEqual(sum(choice["visits"] for choice in payload["choices"]), 4)
+
+    def test_session_suggest_action_uses_fresh_seed_for_cpp_mcts(self) -> None:
+        original = ui_server.suggest_with_cpp_mcts
+        seeds = []
+
+        def fake_cpp_suggest(state, simulations, seed=1):
+            seeds.append(seed)
+            return {
+                "action": 0,
+                "choices": [{"action": 0, "visits": simulations, "value": 0.0}],
+                "state_mode": "tracked",
+            }
+
+        ui_server.suggest_with_cpp_mcts = fake_cpp_suggest
+        try:
+            first = GameSession().suggest_action(simulations=4)
+            second = GameSession().suggest_action(simulations=4)
+        finally:
+            ui_server.suggest_with_cpp_mcts = original
+
+        self.assertEqual(len(seeds), 2)
+        self.assertNotEqual(seeds[0], seeds[1])
+        self.assertEqual(first["suggestion"]["seed"], seeds[0])
+        self.assertEqual(second["suggestion"]["seed"], seeds[1])
 
     def test_action_description_formats_finish_and_claim(self) -> None:
         state = GameState.new()
