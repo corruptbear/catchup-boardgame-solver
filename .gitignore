@@ -2,4 +2,4 @@ __pycache__/
 *.py[cod]
 .playwright-cli/
 output/
-cpp/build/
+catchup/cpp/build/

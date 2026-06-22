@@ -11,7 +11,7 @@ from typing import Any
 from .game import GameState
 
 
-DEFAULT_SOLVER_PATH = Path(__file__).resolve().parent.parent / "cpp" / "build" / "catchup_mcts"
+DEFAULT_SOLVER_PATH = Path(__file__).resolve().parent / "cpp" / "build" / "catchup_mcts"
 
 
 def find_cpp_solver() -> Path | None:
