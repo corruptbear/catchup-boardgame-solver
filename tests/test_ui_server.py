@@ -75,7 +75,7 @@ class UiServerTest(unittest.TestCase):
         self.assertEqual(suggestion["player"], PLAYER_ONE)
         self.assertEqual(suggestion["player_name"], PLAYER_NAMES[PLAYER_ONE])
         self.assertEqual(suggestion["simulations"], 4)
-        self.assertIn(suggestion["engine"], ("cpp", "python"))
+        self.assertIn(suggestion["engine"], ("cpp/tracked", "python"))
         self.assertIn("Claim #", suggestion["label"])
         self.assertEqual(suggestion["action"], choices[0]["action"])
         self.assertEqual(sum(choice["visits"] for choice in choices), 4)

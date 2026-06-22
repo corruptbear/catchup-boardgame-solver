@@ -87,8 +87,42 @@ int compare_size_vectors(const std::vector<int>& first, const std::vector<int>& 
     return 0;
 }
 
-struct State {
+std::uint64_t cell_bit(int cell) {
+    return std::uint64_t{1} << cell;
+}
+
+int pop_first_cell(std::uint64_t& mask) {
+    int cell = __builtin_ctzll(mask);
+    mask &= mask - 1;
+    return cell;
+}
+
+int first_cell(std::uint64_t mask) {
+    return __builtin_ctzll(mask);
+}
+
+int popcount(std::uint64_t mask) {
+    return __builtin_popcountll(mask);
+}
+
+struct EmptyFloodResult {
+    std::uint64_t cells = 0;
+    std::array<std::uint64_t, 2> adjacency{};
+};
+
+struct TrackedState {
     std::array<int, kCellCount> owners{};
+    std::array<int, kCellCount> parents{};
+    std::array<int, kCellCount> sizes{};
+    std::array<std::uint64_t, 2> roots_mask{};
+    std::array<std::array<int, kCellCount + 1>, 2> size_histogram{};
+    std::array<int, 2> max_group_size{};
+    int empty_count_cached = kCellCount;
+    std::array<int, kCellCount> empty_component_of{};
+    std::array<std::uint64_t, kCellCount> empty_component_cells{};
+    std::uint64_t empty_roots_mask = 0;
+    std::array<std::array<std::uint64_t, 2>, kCellCount> empty_adjacency{};
+    std::array<std::array<std::uint64_t, kCellCount>, 2> claimed_adjacent_empty{};
     int current_player = kPlayerOne;
     std::vector<int> selected;
     int max_claims = 1;
@@ -96,88 +130,80 @@ struct State {
     bool opening_turn = true;
     int completed_turns = 0;
 
-    State() {
+    TrackedState() {
         owners.fill(kEmpty);
+        rebuild_tracking();
+    }
+
+    void rebuild_from_owners() {
+        rebuild_tracking();
     }
 
     int empty_count() const {
-        int count = 0;
-        for (int owner : owners) {
-            if (owner == kEmpty) {
-                ++count;
-            }
-        }
-        return count;
+        return empty_count_cached;
     }
 
     std::vector<int> group_sizes(int player) const {
-        std::array<bool, kCellCount> visited{};
-        std::vector<int> sizes;
-        const auto& neighbors = board().neighbors;
-
-        for (int cell = 0; cell < kCellCount; ++cell) {
-            if (visited[cell] || owners[cell] != player) {
-                continue;
+        std::vector<int> result;
+        for (int size = max_group_size[player]; size > 0; --size) {
+            int count = size_histogram[player][size];
+            for (int index = 0; index < count; ++index) {
+                result.push_back(size);
             }
-
-            int size = 0;
-            std::vector<int> stack = {cell};
-            visited[cell] = true;
-            while (!stack.empty()) {
-                int current = stack.back();
-                stack.pop_back();
-                ++size;
-                for (int neighbor : neighbors[current]) {
-                    if (!visited[neighbor] && owners[neighbor] == player) {
-                        visited[neighbor] = true;
-                        stack.push_back(neighbor);
-                    }
-                }
-            }
-            sizes.push_back(size);
         }
-
-        std::sort(sizes.begin(), sizes.end(), std::greater<int>());
-        return sizes;
+        return result;
     }
 
     int largest_group_size() const {
-        int largest = 0;
-        for (int player : {kPlayerOne, kPlayerTwo}) {
-            auto sizes = group_sizes(player);
-            if (!sizes.empty()) {
-                largest = std::max(largest, sizes.front());
-            }
-        }
-        return largest;
+        return std::max(max_group_size[kPlayerOne], max_group_size[kPlayerTwo]);
     }
 
     std::vector<int> reachable_group_bounds(int player) const {
-        std::array<bool, kCellCount> visited{};
         std::vector<int> bounds;
-        const int opponent = other_player(player);
-        const auto& neighbors = board().neighbors;
+        std::uint64_t visited_claimed = 0;
+        std::uint64_t visited_empty = 0;
 
-        for (int cell = 0; cell < kCellCount; ++cell) {
-            if (visited[cell] || owners[cell] == opponent) {
-                continue;
+        while (true) {
+            std::vector<int> stack;
+            std::uint64_t unvisited_claimed = roots_mask[player] & ~visited_claimed;
+            std::uint64_t unvisited_empty = empty_roots_mask & ~visited_empty;
+            if (unvisited_claimed != 0) {
+                int root = first_cell(unvisited_claimed);
+                visited_claimed |= cell_bit(root);
+                stack.push_back(root);
+            } else if (unvisited_empty != 0) {
+                int root = first_cell(unvisited_empty);
+                visited_empty |= cell_bit(root);
+                stack.push_back(kCellCount + root);
+            } else {
+                break;
             }
 
-            int size = 0;
-            std::vector<int> stack = {cell};
-            visited[cell] = true;
+            int reachable_size = 0;
             while (!stack.empty()) {
-                int current = stack.back();
+                int node = stack.back();
                 stack.pop_back();
-                ++size;
-                for (int neighbor : neighbors[current]) {
-                    if (!visited[neighbor] && owners[neighbor] != opponent) {
-                        visited[neighbor] = true;
-                        stack.push_back(neighbor);
+                if (node < kCellCount) {
+                    int root = node;
+                    reachable_size += sizes[root];
+                    std::uint64_t linked_empty = claimed_adjacent_empty[player][root] & ~visited_empty;
+                    while (linked_empty != 0) {
+                        int empty_root = pop_first_cell(linked_empty);
+                        visited_empty |= cell_bit(empty_root);
+                        stack.push_back(kCellCount + empty_root);
+                    }
+                } else {
+                    int root = node - kCellCount;
+                    reachable_size += popcount(empty_component_cells[root]);
+                    std::uint64_t linked_claimed = empty_adjacency[root][player] & ~visited_claimed;
+                    while (linked_claimed != 0) {
+                        int claimed_root = pop_first_cell(linked_claimed);
+                        visited_claimed |= cell_bit(claimed_root);
+                        stack.push_back(claimed_root);
                     }
                 }
             }
-            bounds.push_back(size);
+            bounds.push_back(reachable_size);
         }
 
         std::sort(bounds.begin(), bounds.end(), std::greater<int>());
@@ -266,7 +292,7 @@ struct State {
             return;
         }
 
-        owners[action] = current_player;
+        claim(current_player, action);
         selected.push_back(action);
         if (static_cast<int>(selected.size()) == max_claims || empty_count() == 0) {
             finish_turn();
@@ -285,16 +311,260 @@ struct State {
         opening_turn = false;
         ++completed_turns;
     }
+
+private:
+    void rebuild_tracking() {
+        parents.fill(-1);
+        sizes.fill(0);
+        roots_mask.fill(0);
+        max_group_size.fill(0);
+        empty_component_of.fill(-1);
+        empty_component_cells.fill(0);
+        empty_roots_mask = 0;
+        empty_count_cached = 0;
+        for (auto& player_histogram : size_histogram) {
+            player_histogram.fill(0);
+        }
+        for (auto& adjacency : empty_adjacency) {
+            adjacency.fill(0);
+        }
+        for (auto& player_links : claimed_adjacent_empty) {
+            player_links.fill(0);
+        }
+
+        std::uint64_t empty_cells = 0;
+        for (int cell = 0; cell < kCellCount; ++cell) {
+            int owner = owners[cell];
+            if (owner == kEmpty) {
+                empty_cells |= cell_bit(cell);
+                ++empty_count_cached;
+            } else {
+                parents[cell] = cell;
+                sizes[cell] = 1;
+                roots_mask[owner] |= cell_bit(cell);
+                add_group_size(owner, 1);
+            }
+        }
+
+        const auto& neighbors = board().neighbors;
+        for (int cell = 0; cell < kCellCount; ++cell) {
+            int owner = owners[cell];
+            if (owner == kEmpty) {
+                continue;
+            }
+            for (int neighbor : neighbors[cell]) {
+                if (neighbor > cell && owners[neighbor] == owner) {
+                    union_components(owner, cell, neighbor);
+                }
+            }
+        }
+
+        rebuild_empty_components_from_mask(empty_cells);
+    }
+
+    void claim(int player, int cell) {
+        int old_empty_root = empty_component_of[cell];
+        owners[cell] = player;
+        --empty_count_cached;
+        parents[cell] = cell;
+        sizes[cell] = 1;
+        roots_mask[player] |= cell_bit(cell);
+        add_group_size(player, 1);
+
+        for (int neighbor : board().neighbors[cell]) {
+            if (owners[neighbor] == player) {
+                union_components(player, cell, neighbor);
+            }
+        }
+
+        split_empty_region_after_claim(old_empty_root, cell);
+    }
+
+    int find_root(int cell) {
+        int parent = parents[cell];
+        if (parent != cell) {
+            parents[cell] = find_root(parent);
+        }
+        return parents[cell];
+    }
+
+    int union_components(int player, int first, int second) {
+        int first_root = find_root(first);
+        int second_root = find_root(second);
+        if (first_root == second_root) {
+            return first_root;
+        }
+
+        if (sizes[first_root] < sizes[second_root]) {
+            std::swap(first_root, second_root);
+        }
+
+        int first_size = sizes[first_root];
+        int second_size = sizes[second_root];
+        int merged_size = first_size + second_size;
+
+        parents[second_root] = first_root;
+        sizes[first_root] = merged_size;
+        sizes[second_root] = 0;
+        remove_group_size(player, first_size);
+        remove_group_size(player, second_size);
+        add_group_size(player, merged_size);
+        roots_mask[player] &= ~cell_bit(second_root);
+        replace_adjacent_claimed_root(player, second_root, first_root);
+        return first_root;
+    }
+
+    void add_group_size(int player, int size) {
+        ++size_histogram[player][size];
+        max_group_size[player] = std::max(max_group_size[player], size);
+    }
+
+    void remove_group_size(int player, int size) {
+        --size_histogram[player][size];
+    }
+
+    void split_empty_region_after_claim(int old_root, int claimed_cell) {
+        if (old_root == -1) {
+            return;
+        }
+
+        std::uint64_t old_cells = empty_component_cells[old_root];
+        std::uint64_t remaining = old_cells & ~cell_bit(claimed_cell);
+        if (remaining == 0) {
+            unregister_empty_component(old_root);
+            return;
+        }
+
+        std::uint64_t unvisited = remaining;
+        EmptyFloodResult first = flood_empty_component(first_cell(unvisited), unvisited);
+        if (unvisited == 0 && old_root != claimed_cell) {
+            empty_component_cells[old_root] = remaining;
+            empty_component_of[claimed_cell] = -1;
+            refresh_empty_component_adjacency(old_root, first.adjacency);
+            return;
+        }
+
+        unregister_empty_component(old_root);
+        register_empty_component(first_cell(first.cells), first.cells, first.adjacency);
+        rebuild_empty_components_from_mask(unvisited);
+    }
+
+    void rebuild_empty_components_from_mask(std::uint64_t cells) {
+        while (cells != 0) {
+            EmptyFloodResult result = flood_empty_component(first_cell(cells), cells);
+            register_empty_component(first_cell(result.cells), result.cells, result.adjacency);
+        }
+    }
+
+    EmptyFloodResult flood_empty_component(int start, std::uint64_t& remaining) {
+        remaining &= ~cell_bit(start);
+        EmptyFloodResult result;
+        result.cells = cell_bit(start);
+        std::vector<int> stack = {start};
+
+        while (!stack.empty()) {
+            int cell = stack.back();
+            stack.pop_back();
+            for (int neighbor : board().neighbors[cell]) {
+                if (owners[neighbor] == kEmpty) {
+                    std::uint64_t neighbor_bit = cell_bit(neighbor);
+                    if ((remaining & neighbor_bit) != 0) {
+                        remaining &= ~neighbor_bit;
+                        result.cells |= neighbor_bit;
+                        stack.push_back(neighbor);
+                    }
+                } else {
+                    int owner = owners[neighbor];
+                    result.adjacency[owner] |= cell_bit(find_root(neighbor));
+                }
+            }
+        }
+        return result;
+    }
+
+    void register_empty_component(
+        int root,
+        std::uint64_t cells,
+        const std::array<std::uint64_t, 2>& adjacency) {
+        empty_roots_mask |= cell_bit(root);
+        empty_component_cells[root] = cells;
+        std::uint64_t cells_to_mark = cells;
+        while (cells_to_mark != 0) {
+            empty_component_of[pop_first_cell(cells_to_mark)] = root;
+        }
+        empty_adjacency[root] = adjacency;
+        add_empty_adjacency_reverse_links(root, adjacency);
+    }
+
+    void unregister_empty_component(int root) {
+        std::uint64_t cells = empty_component_cells[root];
+        while (cells != 0) {
+            empty_component_of[pop_first_cell(cells)] = -1;
+        }
+        remove_empty_adjacency_reverse_links(root, empty_adjacency[root]);
+        empty_adjacency[root].fill(0);
+        empty_component_cells[root] = 0;
+        empty_roots_mask &= ~cell_bit(root);
+    }
+
+    void refresh_empty_component_adjacency(
+        int root,
+        const std::array<std::uint64_t, 2>& adjacency) {
+        remove_empty_adjacency_reverse_links(root, empty_adjacency[root]);
+        empty_adjacency[root] = adjacency;
+        add_empty_adjacency_reverse_links(root, adjacency);
+    }
+
+    void add_empty_adjacency_reverse_links(
+        int empty_root,
+        const std::array<std::uint64_t, 2>& adjacency) {
+        for (int player : {kPlayerOne, kPlayerTwo}) {
+            std::uint64_t touching_roots = adjacency[player];
+            while (touching_roots != 0) {
+                int touching_claimed_root = pop_first_cell(touching_roots);
+                claimed_adjacent_empty[player][touching_claimed_root] |= cell_bit(empty_root);
+            }
+        }
+    }
+
+    void remove_empty_adjacency_reverse_links(
+        int empty_root,
+        const std::array<std::uint64_t, 2>& adjacency) {
+        for (int player : {kPlayerOne, kPlayerTwo}) {
+            std::uint64_t touching_roots = adjacency[player];
+            while (touching_roots != 0) {
+                int touching_claimed_root = pop_first_cell(touching_roots);
+                claimed_adjacent_empty[player][touching_claimed_root] &= ~cell_bit(empty_root);
+            }
+        }
+    }
+
+    void replace_adjacent_claimed_root(int player, int old_root, int new_root) {
+        std::uint64_t empty_roots = claimed_adjacent_empty[player][old_root];
+        claimed_adjacent_empty[player][old_root] = 0;
+        if (empty_roots == 0) {
+            return;
+        }
+
+        claimed_adjacent_empty[player][new_root] |= empty_roots;
+        std::uint64_t roots_to_update = empty_roots;
+        while (roots_to_update != 0) {
+            int empty_root = pop_first_cell(roots_to_update);
+            empty_adjacency[empty_root][player] &= ~cell_bit(old_root);
+            empty_adjacency[empty_root][player] |= cell_bit(new_root);
+        }
+    }
 };
 
+template <typename StateT>
 struct Node {
-    explicit Node(State node_state, Node* parent_node = nullptr, int action = -1)
+    explicit Node(StateT node_state, Node* parent_node = nullptr, int action = -1)
         : state(std::move(node_state)),
           parent(parent_node),
           action_from_parent(action),
           untried_actions(state.legal_actions()) {}
 
-    State state;
+    StateT state;
     Node* parent = nullptr;
     int action_from_parent = -1;
     std::vector<std::pair<int, Node*>> children;
@@ -307,6 +577,7 @@ struct Node {
     }
 };
 
+template <typename StateT>
 class Mcts {
 public:
     Mcts(int simulation_count, std::uint64_t seed)
@@ -316,23 +587,23 @@ public:
         }
     }
 
-    Node* search(const State& root_state) {
+    Node<StateT>* search(const StateT& root_state) {
         nodes_.clear();
-        nodes_.push_back(std::make_unique<Node>(root_state));
-        Node* root = nodes_.back().get();
+        nodes_.push_back(std::make_unique<Node<StateT>>(root_state));
+        Node<StateT>* root = nodes_.back().get();
 
         for (int simulation = 0; simulation < simulations_; ++simulation) {
             auto path = select_and_expand(root);
-            State terminal = rollout(path.back()->state);
+            StateT terminal = rollout(path.back()->state);
             backpropagate(path, terminal);
         }
         return root;
     }
 
 private:
-    std::vector<Node*> select_and_expand(Node* root) {
-        std::vector<Node*> path = {root};
-        Node* node = root;
+    std::vector<Node<StateT>*> select_and_expand(Node<StateT>* root) {
+        std::vector<Node<StateT>*> path = {root};
+        Node<StateT>* node = root;
 
         while (!node->state.is_terminal() && node->untried_actions.empty() && !node->children.empty()) {
             node = select_child(node);
@@ -344,19 +615,19 @@ private:
         }
 
         int action = pop_random_untried_action(node);
-        State child_state = node->state;
+        StateT child_state = node->state;
         child_state.apply_action(action);
-        nodes_.push_back(std::make_unique<Node>(std::move(child_state), node, action));
-        Node* child = nodes_.back().get();
+        nodes_.push_back(std::make_unique<Node<StateT>>(std::move(child_state), node, action));
+        Node<StateT>* child = nodes_.back().get();
         node->children.push_back({action, child});
         path.push_back(child);
         return path;
     }
 
-    Node* select_child(Node* node) {
+    Node<StateT>* select_child(Node<StateT>* node) {
         const int parent_visits = std::max(node->visits, 1);
         double best_score = -std::numeric_limits<double>::infinity();
-        std::vector<Node*> best_children;
+        std::vector<Node<StateT>*> best_children;
 
         for (auto& [action, child] : node->children) {
             (void) action;
@@ -381,7 +652,7 @@ private:
         return best_children[distribution(rng_)];
     }
 
-    int pop_random_untried_action(Node* node) {
+    int pop_random_untried_action(Node<StateT>* node) {
         std::uniform_int_distribution<std::size_t> distribution(0, node->untried_actions.size() - 1);
         std::size_t index = distribution(rng_);
         int action = node->untried_actions[index];
@@ -389,8 +660,8 @@ private:
         return action;
     }
 
-    State rollout(const State& state) {
-        State current = state;
+    StateT rollout(const StateT& state) {
+        StateT current = state;
         while (!current.is_terminal()) {
             auto actions = current.legal_actions();
             std::uniform_int_distribution<std::size_t> distribution(0, actions.size() - 1);
@@ -399,15 +670,15 @@ private:
         return current;
     }
 
-    static void backpropagate(const std::vector<Node*>& path, const State& terminal) {
+    static void backpropagate(const std::vector<Node<StateT>*>& path, const StateT& terminal) {
         for (auto iterator = path.rbegin(); iterator != path.rend(); ++iterator) {
-            Node* node = *iterator;
+            Node<StateT>* node = *iterator;
             ++node->visits;
             node->total_value += terminal.result_for(node->state.current_player);
         }
     }
 
-    static double mean_value_for_player(const Node* node, int player) {
+    static double mean_value_for_player(const Node<StateT>* node, int player) {
         double value = node->mean_value();
         if (node->state.current_player == player) {
             return value;
@@ -417,7 +688,7 @@ private:
 
     int simulations_;
     std::mt19937_64 rng_;
-    std::vector<std::unique_ptr<Node>> nodes_;
+    std::vector<std::unique_ptr<Node<StateT>>> nodes_;
 };
 
 std::vector<int> parse_int_list(const std::string& text) {
@@ -459,8 +730,8 @@ std::unordered_map<std::string, std::string> parse_args(int argc, char** argv) {
     return args;
 }
 
-State state_from_args(const std::unordered_map<std::string, std::string>& args) {
-    State state;
+TrackedState state_from_args(const std::unordered_map<std::string, std::string>& args) {
+    TrackedState state;
     auto owners = parse_int_list(require_arg(args, "owners"));
     if (owners.size() != kCellCount) {
         throw std::runtime_error("owners must contain 61 cells");
@@ -479,10 +750,12 @@ State state_from_args(const std::unordered_map<std::string, std::string>& args) 
     state.turn_start_largest = std::stoi(require_arg(args, "turn-start-largest"));
     state.opening_turn = std::stoi(require_arg(args, "opening-turn")) != 0;
     state.completed_turns = std::stoi(require_arg(args, "completed-turns"));
+    state.rebuild_from_owners();
     return state;
 }
 
-std::vector<std::pair<int, Node*>> sorted_choices(const Node* root) {
+template <typename StateT>
+std::vector<std::pair<int, Node<StateT>*>> sorted_choices(const Node<StateT>* root) {
     auto choices = root->children;
     std::sort(
         choices.begin(),
@@ -496,7 +769,8 @@ std::vector<std::pair<int, Node*>> sorted_choices(const Node* root) {
     return choices;
 }
 
-void print_result(const Node* root, int simulations) {
+template <typename StateT>
+void print_result(const Node<StateT>* root, int simulations) {
     auto choices = sorted_choices(root);
     if (choices.empty()) {
         throw std::runtime_error("search produced no choices");
@@ -506,6 +780,7 @@ void print_result(const Node* root, int simulations) {
     std::cout << "\"action\":" << choices.front().first << ",";
     std::cout << "\"player\":" << root->state.current_player << ",";
     std::cout << "\"simulations\":" << simulations << ",";
+    std::cout << "\"state_mode\":\"tracked\",";
     std::cout << "\"choices\":[";
     for (std::size_t index = 0; index < choices.size(); ++index) {
         auto [action, child] = choices[index];
@@ -536,10 +811,13 @@ int main(int argc, char** argv) {
         if (seed_arg != args.end()) {
             seed = static_cast<std::uint64_t>(std::stoull(seed_arg->second));
         }
+        if (args.find("state-mode") != args.end()) {
+            throw std::runtime_error("state-mode is no longer supported; tracked is the only implementation");
+        }
 
-        State state = state_from_args(args);
-        Mcts mcts(simulations, seed);
-        Node* root = mcts.search(state);
+        TrackedState state = state_from_args(args);
+        Mcts<TrackedState> mcts(simulations, seed);
+        Node<TrackedState>* root = mcts.search(state);
         print_result(root, simulations);
         std::cout << "\n";
         return 0;

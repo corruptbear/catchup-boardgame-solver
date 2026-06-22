@@ -220,7 +220,7 @@ class GameSession:
             )
             action = choices[0]["action"]
         else:
-            engine = "cpp"
+            engine = f"cpp/{cpp_result.get('state_mode', 'unknown')}"
             choices = [
                 _choice_from_cpp_result(state, choice)
                 for choice in cpp_result["choices"]

@@ -20,6 +20,7 @@ class CppSolverTest(unittest.TestCase):
         self.assertIn("7", args)
         self.assertIn("--seed", args)
         self.assertIn("3", args)
+        self.assertNotIn("--state-mode", args)
 
     def test_cpp_solver_returns_legal_action_when_built(self) -> None:
         if find_cpp_solver() is None:
@@ -38,6 +39,7 @@ class CppSolverTest(unittest.TestCase):
             sum(choice["visits"] for choice in result["choices"]),
             4,
         )
+        self.assertEqual(result["state_mode"], "tracked")
 
     def test_cpp_solver_handles_partial_turn_when_built(self) -> None:
         if find_cpp_solver() is None:

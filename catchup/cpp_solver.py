@@ -22,7 +22,11 @@ def find_cpp_solver() -> Path | None:
     return path if path.is_file() else None
 
 
-def cpp_solver_args(state: GameState, simulations: int, seed: int = 1) -> list[str]:
+def cpp_solver_args(
+    state: GameState,
+    simulations: int,
+    seed: int = 1,
+) -> list[str]:
     """Build argv for the C++ solver from a Python game state."""
 
     return [
