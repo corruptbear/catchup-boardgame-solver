@@ -111,7 +111,8 @@ async function requestSuggestion() {
     }
 
     const suggestion = payload.suggestion;
-    suggestionText = `${suggestion.player_name}: ${suggestion.label} (${suggestion.simulations} simulations)`;
+    const engine = suggestion.engine ? `, ${suggestion.engine}` : "";
+    suggestionText = `${suggestion.player_name}: ${suggestion.label} (${suggestion.simulations} simulations${engine})`;
     suggestionRows = payload.choices;
   } finally {
     suggestionLoading = false;
@@ -152,11 +153,11 @@ function renderBoard() {
 
     polygon.setAttribute("points", hexPoints(cx, cy));
     coordLabel.setAttribute("x", cx);
-    coordLabel.setAttribute("y", cy - 4);
+    coordLabel.setAttribute("y", cy + 14);
     coordLabel.setAttribute("class", "coord-label");
     coordLabel.textContent = `(${item.cell.q},${item.cell.r})`;
     indexLabel.setAttribute("x", cx);
-    indexLabel.setAttribute("y", cy + 13);
+    indexLabel.setAttribute("y", cy - 3);
     indexLabel.setAttribute("class", "index-label");
     indexLabel.textContent = `#${item.cell.index}`;
     title.textContent = `Cell ${item.cell.index}, coordinate (${item.cell.q}, ${item.cell.r})`;

@@ -1,5 +1,6 @@
 import unittest
 
+import catchup.ui_server as ui_server
 from catchup.components import PLAYER_ONE, PLAYER_TWO
 from catchup.game import FINISH, GameState
 from catchup.ui_server import PLAYER_NAMES, GameSession, action_description, state_payload
@@ -74,6 +75,7 @@ class UiServerTest(unittest.TestCase):
         self.assertEqual(suggestion["player"], PLAYER_ONE)
         self.assertEqual(suggestion["player_name"], PLAYER_NAMES[PLAYER_ONE])
         self.assertEqual(suggestion["simulations"], 4)
+        self.assertIn(suggestion["engine"], ("cpp", "python"))
         self.assertIn("Claim #", suggestion["label"])
         self.assertEqual(suggestion["action"], choices[0]["action"])
         self.assertEqual(sum(choice["visits"] for choice in choices), 4)
@@ -83,6 +85,17 @@ class UiServerTest(unittest.TestCase):
         )
         self.assertEqual(state["current_player"], PLAYER_ONE)
         self.assertEqual(state["empty_count"], 61)
+
+    def test_session_suggest_action_falls_back_to_python_mcts(self) -> None:
+        original = ui_server.suggest_with_cpp_mcts
+        ui_server.suggest_with_cpp_mcts = lambda state, simulations: None
+        try:
+            payload = GameSession().suggest_action(simulations=4)
+        finally:
+            ui_server.suggest_with_cpp_mcts = original
+
+        self.assertEqual(payload["suggestion"]["engine"], "python")
+        self.assertEqual(sum(choice["visits"] for choice in payload["choices"]), 4)
 
     def test_action_description_formats_finish_and_claim(self) -> None:
         state = GameState.new()

@@ -308,15 +308,15 @@ dd {
 }
 
 .cell .coord-label {
-  fill: #173647;
-  font-size: 9px;
-  font-weight: 800;
+  fill: #607888;
+  font-size: 6px;
+  font-weight: 700;
 }
 
 .cell .index-label {
-  fill: #607888;
-  font-size: 8px;
-  font-weight: 700;
+  fill: #173647;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .cell.empty polygon {

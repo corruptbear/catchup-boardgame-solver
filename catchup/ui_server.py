@@ -13,6 +13,7 @@ from typing import Any
 
 from .board import BOARD
 from .components import PLAYER_ONE, PLAYER_TWO
+from .cpp_solver import suggest_with_cpp_mcts
 from .game import FINISH, GameState
 from .solvers import MCTSPlayer
 
@@ -205,20 +206,32 @@ class GameSession:
         with self._lock:
             state = self._state.copy()
 
-        player = MCTSPlayer(simulations=simulations)
-        root = player.search(state)
-        choices = sorted(
-            (
-                choice_description(state, action, child.visits)
-                for action, child in root.children.items()
-            ),
-            key=lambda choice: (-choice["visits"], choice["action"]),
-        )
-        action = choices[0]["action"]
+        cpp_result = suggest_with_cpp_mcts(state, simulations)
+        if cpp_result is None:
+            engine = "python"
+            player = MCTSPlayer(simulations=simulations)
+            root = player.search(state)
+            choices = sorted(
+                (
+                    choice_description(state, action, child.visits)
+                    for action, child in root.children.items()
+                ),
+                key=lambda choice: (-choice["visits"], choice["action"]),
+            )
+            action = choices[0]["action"]
+        else:
+            engine = "cpp"
+            choices = [
+                _choice_from_cpp_result(state, choice)
+                for choice in cpp_result["choices"]
+            ]
+            action = int(cpp_result["action"])
+
         suggestion = action_description(state, action)
         suggestion["player"] = state.current_player
         suggestion["player_name"] = PLAYER_NAMES[state.current_player]
         suggestion["simulations"] = simulations
+        suggestion["engine"] = engine
 
         with self._lock:
             payload = state_payload(self._state, self._message)
@@ -255,6 +268,13 @@ class GameSession:
             ):
                 return candidate
         raise ValueError("could not find the start of the current turn")
+
+
+def _choice_from_cpp_result(state: GameState, choice: dict[str, Any]) -> dict[str, Any]:
+    result = choice_description(state, int(choice["action"]), int(choice["visits"]))
+    if "value" in choice:
+        result["value"] = float(choice["value"])
+    return result
 
 
 class CatchupRequestHandler(BaseHTTPRequestHandler):
