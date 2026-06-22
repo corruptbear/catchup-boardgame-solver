@@ -67,3 +67,83 @@ it makes early finishing much more common than it should be in many positions.
 A better random rollout policy probably needs to strongly prefer claiming the
 maximum number of cells, while still allowing early finish when claiming more
 would trigger a strategically bad increase to the global largest group size.
+
+## Empty Region Upper Bound
+
+On the 61-cell radius-4 board, there can be at most 21 empty connected regions.
+
+![Layout with 21 isolated empty regions](../output/empty_regions_21.png)
+
+The empty-region count is exactly bounded by the board graph's maximum
+independent set size. Pick one cell from each empty connected region. No two
+picked cells can be adjacent, because adjacent empty cells would be in the same
+region. Therefore the number of empty regions is at most the maximum
+independent set size. Conversely, if an independent set is left empty and every
+other cell is claimed, each empty cell is an isolated empty region.
+
+The exact computation in `notes/maximum_independent_set.py` uses the standard
+include/exclude recursion for maximum independent set. For a remaining induced
+subgraph `G[S]`, let `MIS(S)` return a maximum independent set contained in the
+remaining vertex set `S`.
+
+```text
+MIS(S):
+    if S is empty:
+        return empty set
+
+    if S contains isolated vertices:
+        take all isolated vertices I
+        return I union MIS(S - I)
+
+    choose a vertex v in S
+
+    include = {v} union MIS(S - N[v])
+    exclude = MIS(S - {v})
+
+    return the larger of include and exclude
+```
+
+Here `N[v]` is the closed neighborhood of `v`: the vertex `v` plus every
+neighbor of `v`. If `v` is included, all of `N[v]` must be removed before the
+recursive call. If `v` is excluded, only `v` is removed.
+
+The isolated-vertex rule is safe because an isolated vertex has no remaining
+neighbors, so some maximum independent set always contains it. The include and
+exclude branches are exact because every maximum independent set either contains
+the chosen vertex `v` or does not contain it.
+
+The implementation stores each set as a bitmask. `bit_count()` gives the number
+of cells selected for the independent set, so the solver compares `include.bit_count()` and
+`exclude.bit_count()` to choose the larger independent set. Memoization caches
+results by the remaining-vertex bitmask so the same subgraph is not solved more
+than once.
+
+This recursive maximum-independent-set check returns size 21 on the Catchup
+board.
+
+The helper script also includes a faster row-mask enumeration reference check.
+That method uses the board's row structure:
+
+```text
+1. For each row, enumerate every row-local mask with no adjacent masked cells
+   inside that row.
+2. Enumerate compatible choices from one row to the next. Two consecutive row
+   masks are compatible when none of their masked cells are adjacent in the
+   actual board graph.
+3. Score each complete compatible row-mask choice by total masked cells.
+4. The best score is 21.
+```
+
+This is a useful cross-check because board edges occur only within a row or
+between neighboring rows. A compatible choice of one valid mask per row is
+therefore exactly an independent set on the whole board.
+
+Since a 21-cell independent set exists, the bound is attainable: leave those 21
+non-adjacent cells empty and claim the other 40 cells. Each remaining empty cell
+is then its own empty connected region.
+
+One such independent set is:
+
+```text
+0, 3, 7, 10, 12, 15, 18, 21, 24, 28, 31, 34, 35, 38, 41, 44, 47, 52, 55, 56, 59
+```
