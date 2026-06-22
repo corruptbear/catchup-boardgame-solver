@@ -12,11 +12,11 @@ struct Node {
 
     TrackedState state;
     Node* parent = nullptr;
-    int action_from_parent = -1;
-    std::vector<std::pair<int, Node*>> children;
+    std::int8_t action_from_parent = -1;
+    std::vector<std::pair<Action, Node*>> children;
     int visits = 0;
     double total_value = 0.0;
-    std::vector<int> untried_actions;
+    ActionList untried_actions;
 
     double mean_value() const;
 };

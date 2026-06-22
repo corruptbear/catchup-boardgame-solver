@@ -1,14 +1,20 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
 
-constexpr int kEmpty = -1;
-constexpr int kPlayerOne = 0;
-constexpr int kPlayerTwo = 1;
+using Action = std::uint8_t;
+using Owner = std::int8_t;
+
+constexpr Owner kEmpty = -1;
+constexpr Owner kPlayerOne = 0;
+constexpr Owner kPlayerTwo = 1;
 constexpr int kCellCount = 61;
-constexpr int kFinish = kCellCount;
+constexpr int kMaxActions = kCellCount + 1;
+constexpr int kMaxClaims = 3;
+constexpr Action kFinish = kCellCount;
 constexpr int kEarlyWinCheckMinFilledCells = 30;
 
 struct Board {

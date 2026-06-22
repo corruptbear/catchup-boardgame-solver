@@ -53,7 +53,7 @@ std::vector<Node*> Mcts::select_and_expand(Node* root) {
     child_state.apply_action(action);
     nodes_.push_back(std::make_unique<Node>(std::move(child_state), node, action));
     Node* child = nodes_.back().get();
-    node->children.push_back({action, child});
+    node->children.push_back({static_cast<Action>(action), child});
     path.push_back(child);
     return path;
 }
@@ -90,7 +90,7 @@ int Mcts::pop_random_untried_action(Node* node) {
     std::uniform_int_distribution<std::size_t> distribution(0, node->untried_actions.size() - 1);
     std::size_t index = distribution(rng_);
     int action = node->untried_actions[index];
-    node->untried_actions.erase(node->untried_actions.begin() + static_cast<std::ptrdiff_t>(index));
+    node->untried_actions.erase_unordered(index);
     return action;
 }
 

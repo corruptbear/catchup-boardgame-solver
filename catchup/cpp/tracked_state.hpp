@@ -5,27 +5,67 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
+struct ActionList {
+    std::array<Action, kMaxActions> values{};
+    std::uint8_t count = 0;
+
+    bool empty() const { return count == 0; }
+    std::size_t size() const { return count; }
+    Action operator[](std::size_t index) const { return values[index]; }
+    Action back() const { return values[count - 1]; }
+    void clear() { count = 0; }
+
+    void push_back(int action) {
+        if (count >= values.size()) {
+            throw std::runtime_error("too many actions");
+        }
+        values[count++] = static_cast<Action>(action);
+    }
+
+    void erase_unordered(std::size_t index) {
+        values[index] = values[--count];
+    }
+};
+
+struct SelectedCells {
+    std::array<Action, kMaxClaims> values{};
+    std::uint8_t count = 0;
+
+    bool empty() const { return count == 0; }
+    std::size_t size() const { return count; }
+    Action operator[](std::size_t index) const { return values[index]; }
+    Action back() const { return values[count - 1]; }
+    void clear() { count = 0; }
+
+    void push_back(int cell) {
+        if (count >= values.size()) {
+            throw std::runtime_error("too many selected cells");
+        }
+        values[count++] = static_cast<Action>(cell);
+    }
+};
+
 struct TrackedState {
-    std::array<int, kCellCount> owners{};
-    std::array<int, kCellCount> parents{};
-    std::array<int, kCellCount> sizes{};
+    std::array<Owner, kCellCount> owners{};
+    std::array<std::int8_t, kCellCount> parents{};
+    std::array<std::uint8_t, kCellCount> sizes{};
     std::array<std::uint64_t, 2> roots_mask{};
-    std::array<std::array<int, kCellCount + 1>, 2> size_histogram{};
-    std::array<int, 2> max_group_size{};
-    int empty_count_cached = kCellCount;
-    std::array<int, kCellCount> empty_component_of{};
+    std::array<std::array<std::uint8_t, kCellCount + 1>, 2> size_histogram{};
+    std::array<std::uint8_t, 2> max_group_size{};
+    std::uint8_t empty_count_cached = kCellCount;
+    std::array<std::int8_t, kCellCount> empty_component_of{};
     std::array<std::uint64_t, kCellCount> empty_component_cells{};
     std::uint64_t empty_roots_mask = 0;
-    std::array<std::array<std::uint64_t, 2>, kCellCount> empty_adjacency{};
-    std::array<std::array<std::uint64_t, kCellCount>, 2> claimed_adjacent_empty{};
-    int current_player = kPlayerOne;
-    std::vector<int> selected;
-    int max_claims = 1;
-    int turn_start_largest = 0;
+    std::array<std::uint64_t, kCellCount> region_neighbors{};
+    Owner current_player = kPlayerOne;
+    SelectedCells selected;
+    std::uint8_t max_claims = 1;
+    std::uint8_t turn_start_largest = 0;
     bool opening_turn = true;
-    int completed_turns = 0;
+    std::uint8_t completed_turns = 0;
 
     TrackedState();
 
@@ -38,16 +78,18 @@ struct TrackedState {
     bool is_terminal() const;
     std::optional<int> winner() const;
     int result_for(int player) const;
-    std::vector<int> legal_actions() const;
+    ActionList legal_actions() const;
     void apply_action(int action);
     void finish_turn();
 
 private:
     struct EmptyFloodResult {
         std::uint64_t cells = 0;
-        std::array<std::uint64_t, 2> adjacency{};
+        std::uint64_t touching_claimed = 0;
     };
 
+    std::array<std::uint8_t, kCellCount + 1> reachable_group_bound_histogram(
+        int player) const;
     void rebuild_tracking();
     void claim(int player, int cell);
     int find_root(int cell);
@@ -60,16 +102,13 @@ private:
     void register_empty_component(
         int root,
         std::uint64_t cells,
-        const std::array<std::uint64_t, 2>& adjacency);
+        std::uint64_t touching_claimed);
     void unregister_empty_component(int root);
-    void refresh_empty_component_adjacency(
+    void refresh_empty_region_neighbors(
         int root,
-        const std::array<std::uint64_t, 2>& adjacency);
-    void add_empty_adjacency_reverse_links(
-        int empty_root,
-        const std::array<std::uint64_t, 2>& adjacency);
-    void remove_empty_adjacency_reverse_links(
-        int empty_root,
-        const std::array<std::uint64_t, 2>& adjacency);
-    void replace_adjacent_claimed_root(int player, int old_root, int new_root);
+        std::uint64_t touching_claimed);
+    void add_region_edges(int root, std::uint64_t neighbors);
+    void remove_region_edges(int root, std::uint64_t neighbors);
+    void replace_region_root(int old_root, int new_root);
+    void add_opponent_claimed_neighbors(int player, int root, int cell);
 };

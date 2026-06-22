@@ -66,21 +66,33 @@ TrackedState state_from_args(const std::unordered_map<std::string, std::string>&
         if (owner != kEmpty && owner != kPlayerOne && owner != kPlayerTwo) {
             throw std::runtime_error("invalid owner value");
         }
-        state.owners[index] = owner;
+        state.owners[index] = static_cast<Owner>(owner);
     }
 
-    state.current_player = std::stoi(require_arg(args, "current-player"));
-    state.selected = parse_int_list(require_arg(args, "selected"));
-    state.max_claims = std::stoi(require_arg(args, "max-claims"));
-    state.turn_start_largest = std::stoi(require_arg(args, "turn-start-largest"));
+    state.current_player = static_cast<Owner>(std::stoi(require_arg(args, "current-player")));
+    state.selected.clear();
+    for (int cell : parse_int_list(require_arg(args, "selected"))) {
+        state.selected.push_back(cell);
+    }
+    state.max_claims = static_cast<std::uint8_t>(std::stoi(require_arg(args, "max-claims")));
+    state.turn_start_largest = static_cast<std::uint8_t>(
+        std::stoi(require_arg(args, "turn-start-largest")));
     state.opening_turn = std::stoi(require_arg(args, "opening-turn")) != 0;
-    state.completed_turns = std::stoi(require_arg(args, "completed-turns"));
+    state.completed_turns = static_cast<std::uint8_t>(
+        std::stoi(require_arg(args, "completed-turns")));
     state.rebuild_from_owners();
     return state;
 }
 
 std::vector<std::pair<int, Node*>> sorted_choices(const Node* root) {
-    auto choices = root->children;
+    std::vector<std::pair<int, Node*>> choices;
+    choices.reserve(root->children.size());
+    for (const auto& [action, child] : root->children) {
+        choices.push_back({
+            static_cast<int>(action),
+            child,
+        });
+    }
     std::sort(
         choices.begin(),
         choices.end(),
@@ -101,7 +113,7 @@ void print_result(const Node* root, int simulations) {
 
     std::cout << "{";
     std::cout << "\"action\":" << choices.front().first << ",";
-    std::cout << "\"player\":" << root->state.current_player << ",";
+    std::cout << "\"player\":" << static_cast<int>(root->state.current_player) << ",";
     std::cout << "\"simulations\":" << simulations << ",";
     std::cout << "\"state_mode\":\"tracked\",";
     std::cout << "\"choices\":[";
