@@ -27,6 +27,9 @@ catchup/cpp/build/catchup_arena
 catchup/cpp/build/catchup_self_play
 ```
 
+`catchup_arena` links against the PyTorch C++ libraries so it can run neural
+PUCT from an AOTInductor model package.
+
 The Python bridge in `catchup/cpp_solver.py` looks for that binary by default.
 You can override the path with:
 
@@ -97,6 +100,7 @@ puct:N:prior=flat:rollout=flat             PUCT with flat prior and uniform roll
 puct:N:prior=flat:rollout=biased           PUCT with flat prior and heuristic-biased rollout
 puct:N:prior=heuristic:rollout=flat        PUCT with heuristic prior and uniform rollout
 puct:N:prior=heuristic:rollout=biased      PUCT with heuristic prior and heuristic-biased rollout
+neural-puct:N:MODEL.pt2                    neural PUCT using an AOTInductor package
 ```
 
 Add `--json` for full game records.

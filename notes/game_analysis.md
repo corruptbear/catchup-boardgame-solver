@@ -3,6 +3,20 @@
 These notes collect strategy observations about Catchup itself, separate from
 implementation details.
 
+## Board Symmetries
+
+The Catchup board is a radius-4 regular hexagon on a hex grid. It has 12
+geometric symmetries: the six rotations of a hexagon and the six reflections.
+
+```text
+rotations:   0, 60, 120, 180, 240, 300 degrees
+reflections: 6 mirror axes
+total:       12 symmetries
+```
+
+This is larger than the 8 symmetries of a square Go board, which has four
+rotations and four reflections.
+
 ## Claiming More Cells Is Usually Good
 
 A basic observation is that, in most positions, the current player should claim

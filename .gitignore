@@ -3,3 +3,7 @@ __pycache__/
 .playwright-cli/
 output/
 catchup/cpp/build/
+
+# Generated experiment/training data
+data/**/*.json
+data/**/*.jsonl

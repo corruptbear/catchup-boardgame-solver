@@ -1,6 +1,7 @@
 #include "board.hpp"
 #include "mcts.hpp"
 #include "puct_mcts.hpp"
+#include "puct_neural.hpp"
 #include "tracked_state.hpp"
 
 #include <algorithm>
@@ -173,7 +174,7 @@ void print_result(
     const PuctNode* root,
     int simulations,
     const std::string& engine,
-    PuctConfig config) {
+    const PuctConfig* config) {
     auto choices = sorted_puct_choices(root);
     if (choices.empty()) {
         throw std::runtime_error("search produced no choices");
@@ -184,8 +185,10 @@ void print_result(
     std::cout << "\"player\":" << static_cast<int>(root->state.current_player) << ",";
     std::cout << "\"simulations\":" << simulations << ",";
     std::cout << "\"engine\":\"" << engine << "\",";
-    std::cout << "\"puct_prior\":\"" << puct_prior_mode_name(config.prior) << "\",";
-    std::cout << "\"puct_rollout\":\"" << puct_rollout_mode_name(config.rollout) << "\",";
+    if (config != nullptr) {
+        std::cout << "\"puct_prior\":\"" << puct_prior_mode_name(config->prior) << "\",";
+        std::cout << "\"puct_rollout\":\"" << puct_rollout_mode_name(config->rollout) << "\",";
+    }
     std::cout << "\"state_mode\":\"tracked\",";
     std::cout << "\"choices\":[";
     for (std::size_t index = 0; index < choices.size(); ++index) {
@@ -204,6 +207,10 @@ void print_result(
         std::cout << "}";
     }
     std::cout << "]}";
+}
+
+void print_result(const PuctNode* root, int simulations, const std::string& engine) {
+    print_result(root, simulations, engine, nullptr);
 }
 
 }  // namespace
@@ -234,7 +241,12 @@ int main(int argc, char** argv) {
             };
             PuctMcts mcts(simulations, seed, config);
             PuctNode* root = mcts.search(state);
-            print_result(root, simulations, engine, config);
+            print_result(root, simulations, engine, &config);
+        } else if (engine == "neural-puct") {
+            NeuralEvaluator evaluator(require_arg(args, "model"));
+            NeuralPuctMcts mcts(simulations, seed, evaluator);
+            PuctNode* root = mcts.search(state);
+            print_result(root, simulations, engine);
         } else {
             throw std::runtime_error("unknown engine: " + engine);
         }

@@ -105,6 +105,7 @@ puct:N:prior=flat:rollout=flat             PUCT with flat prior and uniform roll
 puct:N:prior=flat:rollout=biased           PUCT with flat prior and heuristic-biased rollout
 puct:N:prior=heuristic:rollout=flat        PUCT with heuristic prior and uniform rollout
 puct:N:prior=heuristic:rollout=biased      PUCT with heuristic prior and heuristic-biased rollout
+neural-puct:N:MODEL.pt2                    neural PUCT using an AOTInductor package
 ```
 
 Use `--json` to emit the full game records and summary as JSON.
@@ -145,6 +146,55 @@ catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 
 
 Normal data generation omits `--seed`, so each run uses fresh randomness.
 Pass `--seed N` only when you intentionally want reproducible debugging output.
+
+During training, load shards with symmetry augmentation in the Python loader:
+
+```python
+from catchup.training.data_loader import iter_training_samples
+
+samples = iter_training_samples(
+    "data/bootstrap/shard_0001_50g_10k.jsonl",
+    augment_symmetry=True,
+    symmetry_copies=3,
+)
+```
+
+Train a small PyTorch policy/value net with `python3.10`:
+
+```sh
+python3.10 -m catchup.training.torch_policy_value --data-glob 'data/bootstrap/shard_*_50g_10k.jsonl' --validation-shards 3 --epochs 3 --batch-size 1024 --hidden-size 128 --symmetry-copies 3 --device mps --out data/models/small_policy_value_30shards_3sym.pt --metrics-out data/models/small_policy_value_30shards_3sym_metrics.json
+```
+
+Try the small graph policy/value net:
+
+```sh
+python3.10 -m catchup.training.torch_policy_value --architecture gnn --gnn-layers 4 --data-glob 'data/bootstrap/shard_*_50g_10k.jsonl' --validation-shards 3 --epochs 3 --batch-size 1024 --hidden-size 128 --symmetry-copies 3 --device mps --out data/models/gnn_policy_value_30shards_3sym_3ep.pt --metrics-out data/models/gnn_policy_value_30shards_3sym_3ep_metrics.json
+```
+
+Run the Python neural PUCT prototype from the empty board:
+
+```sh
+python3.10 -m catchup.neural_puct --checkpoint data/models/small_policy_value_30shards_3sym.pt --simulations 100 --device mps
+```
+
+Export a trained PyTorch model for the C++ neural arena:
+
+```sh
+python3.10 -m catchup.training.export_aoti --checkpoint data/models/gnn_policy_value_30shards_3sym_20ep.pt --exported-program data/models/gnn_policy_value_30shards_3sym_20ep_exported.pt2 --package data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps.pt2 --device mps
+```
+
+Run the C++ neural PUCT arena agent:
+
+```sh
+catchup/cpp/build/catchup_arena --agent-a neural-puct:100:data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps.pt2 --agent-b mcts:1000 --pairs 5 --threads 1 --seed 1
+```
+
+Validate the neural agents in the existing arena:
+
+```sh
+python3.10 -m catchup.arena --agent-a neural-greedy:data/models/small_policy_value_30shards_3sym.pt:device=mps --agent-b random --pairs 20 --seed 1
+python3.10 -m catchup.arena --agent-a neural-puct:20:data/models/small_policy_value_30shards_3sym.pt:device=mps --agent-b random --pairs 10 --seed 1
+```
 
 ## Run Tests
 

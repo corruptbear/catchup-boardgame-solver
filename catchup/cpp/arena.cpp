@@ -1,5 +1,6 @@
 #include "mcts.hpp"
 #include "puct_mcts.hpp"
+#include "puct_neural.hpp"
 #include "tracked_state.hpp"
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <exception>
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <random>
@@ -23,12 +25,14 @@ namespace {
 enum class Engine {
     Mcts,
     Puct,
+    NeuralPuct,
 };
 
 struct AgentSpec {
     Engine engine = Engine::Mcts;
     int simulations = 1000;
     PuctConfig puct_config;
+    std::string model_path;
     std::string label;
 };
 
@@ -113,7 +117,8 @@ AgentSpec parse_agent_spec(const std::string& text) {
     auto parts = split_colon(text);
     if (parts.size() < 2) {
         throw std::runtime_error(
-            "agent must be mcts:N or puct:N:prior=flat|heuristic:rollout=flat|biased");
+            "agent must be mcts:N, puct:N:prior=flat|heuristic:rollout=flat|biased, "
+            "or neural-puct:N:MODEL.pt2");
     }
 
     std::string engine_name = parts[0];
@@ -157,9 +162,19 @@ AgentSpec parse_agent_spec(const std::string& text) {
             throw std::runtime_error(
                 "puct agent must include prior=flat|heuristic and rollout=flat|biased");
         }
+    } else if (engine_name == "neural-puct") {
+        if (parts.size() < 3) {
+            throw std::runtime_error("neural-puct agent must be neural-puct:N:MODEL.pt2");
+        }
+        spec.engine = Engine::NeuralPuct;
+        spec.model_path = parts[2];
+        for (std::size_t index = 3; index < parts.size(); ++index) {
+            spec.model_path += ":" + parts[index];
+        }
     } else {
         throw std::runtime_error(
-            "agent must be mcts:N or puct:N:prior=flat|heuristic:rollout=flat|biased");
+            "agent must be mcts:N, puct:N:prior=flat|heuristic:rollout=flat|biased, "
+            "or neural-puct:N:MODEL.pt2");
     }
     return spec;
 }
@@ -215,13 +230,22 @@ int best_action(const PuctNode* root) {
     return best;
 }
 
-int choose_action(const AgentSpec& spec, const TrackedState& state, std::mt19937_64& rng) {
+int choose_action(
+    const AgentSpec& spec,
+    const TrackedState& state,
+    std::mt19937_64& rng,
+    NeuralEvaluator* neural_evaluator) {
     if (spec.engine == Engine::Mcts) {
         Mcts search(spec.simulations, rng());
         return best_action(search.search(state));
     }
 
-    PuctMcts search(spec.simulations, rng(), spec.puct_config);
+    if (spec.engine == Engine::Puct) {
+        PuctMcts search(spec.simulations, rng(), spec.puct_config);
+        return best_action(search.search(state));
+    }
+
+    NeuralPuctMcts search(spec.simulations, rng(), *neural_evaluator);
     return best_action(search.search(state));
 }
 
@@ -237,6 +261,14 @@ GameRecord play_game(
     TrackedState state;
     std::mt19937_64 blue_rng(seed * 2 + 1);
     std::mt19937_64 white_rng(seed * 2 + 2);
+    std::unique_ptr<NeuralEvaluator> blue_neural_evaluator;
+    std::unique_ptr<NeuralEvaluator> white_neural_evaluator;
+    if (blue.engine == Engine::NeuralPuct) {
+        blue_neural_evaluator = std::make_unique<NeuralEvaluator>(blue.model_path);
+    }
+    if (white.engine == Engine::NeuralPuct) {
+        white_neural_evaluator = std::make_unique<NeuralEvaluator>(white.model_path);
+    }
     int internal_actions = 0;
 
     while (!state.is_terminal()) {
@@ -244,9 +276,11 @@ GameRecord play_game(
             throw std::runtime_error("arena game exceeded max-actions");
         }
         if (state.current_player == kPlayerOne) {
-            state.apply_action(choose_action(blue, state, blue_rng));
+            state.apply_action(
+                choose_action(blue, state, blue_rng, blue_neural_evaluator.get()));
         } else {
-            state.apply_action(choose_action(white, state, white_rng));
+            state.apply_action(
+                choose_action(white, state, white_rng, white_neural_evaluator.get()));
         }
         ++internal_actions;
     }

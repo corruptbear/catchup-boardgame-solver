@@ -13,13 +13,40 @@ class ArenaTest(unittest.TestCase):
         self.assertEqual(mcts.label, "mcts:100")
         self.assertEqual(puct.label, "puct:200:prior=flat:rollout=biased")
 
-    def test_parse_agent_spec_rejects_non_cpp_engines(self) -> None:
-        with self.assertRaises(ValueError):
-            parse_agent_spec("random")
+    def test_parse_agent_spec_accepts_random_and_neural_agents(self) -> None:
+        random_spec = parse_agent_spec("random")
+        greedy = parse_agent_spec("neural-greedy:data/models/model.pt:device=mps")
+        puct = parse_agent_spec("neural-puct:25:data/models/model.pt:device=cpu")
+
+        self.assertEqual(random_spec.label, "random")
+        self.assertEqual(greedy.kind, "neural-greedy")
+        self.assertEqual(greedy.checkpoint, "data/models/model.pt")
+        self.assertEqual(greedy.device, "mps")
+        self.assertEqual(puct.kind, "neural-puct")
+        self.assertEqual(puct.simulations, 25)
+        self.assertEqual(puct.checkpoint, "data/models/model.pt")
+        self.assertEqual(puct.device, "cpu")
+
+    def test_parse_agent_spec_rejects_unknown_engines(self) -> None:
         with self.assertRaises(ValueError):
             parse_agent_spec("python-mcts:10")
         with self.assertRaises(ValueError):
             parse_agent_spec("puct:10")
+        with self.assertRaises(ValueError):
+            parse_agent_spec("neural-greedy")
+
+    def test_run_arena_can_compare_random_players_without_cpp(self) -> None:
+        report = run_arena(
+            parse_agent_spec("random"),
+            parse_agent_spec("random"),
+            pairs=1,
+            seed=5,
+        )
+
+        self.assertEqual(len(report.records), 2)
+        self.assertEqual(report.records[0].blue_side, "A")
+        self.assertEqual(report.records[1].blue_side, "B")
+        self.assertEqual(report.summary["games"], 2)
 
     def test_summarize_records_counts_agent_sides_not_labels(self) -> None:
         records = (

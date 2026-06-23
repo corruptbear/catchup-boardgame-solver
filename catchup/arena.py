@@ -7,11 +7,14 @@ import json
 import math
 import random
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from .components import PLAYER_ONE, PLAYER_TWO
 from .cpp_solver import suggest_with_cpp_mcts
 from .game import GameState
+from .neural_puct import NeuralPuctPlayer, TorchPolicyValueEvaluator
+from .solvers import RandomPlayer
 
 
 class ArenaAgent(Protocol):
@@ -29,6 +32,8 @@ class AgentSpec:
     simulations: int | None = None
     puct_prior: str | None = None
     puct_rollout: str | None = None
+    checkpoint: str | None = None
+    device: str = "auto"
 
     @property
     def label(self) -> str:
@@ -37,6 +42,12 @@ class AgentSpec:
                 f"puct:{self.simulations}:"
                 f"prior={self.puct_prior}:rollout={self.puct_rollout}"
             )
+        if self.kind == "random":
+            return "random"
+        if self.kind == "neural-greedy":
+            return f"neural-greedy:{self.checkpoint}:device={self.device}"
+        if self.kind == "neural-puct":
+            return f"neural-puct:{self.simulations}:{self.checkpoint}:device={self.device}"
         return f"{self.kind}:{self.simulations}"
 
 
@@ -101,50 +112,98 @@ class CppMctsAgent:
         return action
 
 
-def parse_agent_spec(text: str) -> AgentSpec:
-    """Parse a C++ arena agent spec."""
+@dataclass(slots=True)
+class NeuralGreedyAgent:
+    """Pick the legal action with the largest neural policy prior."""
 
-    normalized = text.strip().lower()
-    parts = normalized.split(":")
+    evaluator: TorchPolicyValueEvaluator
+
+    def choose_action(self, state: GameState) -> int:
+        evaluation = self.evaluator.evaluate(state)
+        return max(state.legal_actions(), key=lambda action: (evaluation.priors[action], -action))
+
+
+_NEURAL_EVALUATOR_CACHE: dict[tuple[str, str], TorchPolicyValueEvaluator] = {}
+
+
+def parse_agent_spec(text: str) -> AgentSpec:
+    """Parse an arena agent spec."""
+
+    parts = text.strip().split(":")
+    kind = parts[0].lower()
+    if kind == "random" and len(parts) == 1:
+        return AgentSpec("random")
+
     if len(parts) < 2:
         raise ValueError(
-            "agent must be mcts:N or puct:N:prior=flat|heuristic:rollout=flat|biased"
+            "agent must be random, mcts:N, puct:N:prior=flat|heuristic:rollout=flat|biased, "
+            "neural-greedy:CHECKPOINT[:device=auto|mps|cpu], or "
+            "neural-puct:N:CHECKPOINT[:device=auto|mps|cpu]"
         )
 
-    kind = parts[0]
-    simulations = int(parts[1])
-    if simulations <= 0:
-        raise ValueError("agent simulations must be positive")
     if kind == "mcts":
+        simulations = int(parts[1])
+        if simulations <= 0:
+            raise ValueError("agent simulations must be positive")
         if len(parts) != 2:
             raise ValueError("mcts agent must be mcts:N")
         return AgentSpec(kind, simulations)
-    if kind != "puct":
-        raise ValueError(
-            "agent must be mcts:N or puct:N:prior=flat|heuristic:rollout=flat|biased"
-        )
+    if kind == "puct":
+        simulations = int(parts[1])
+        if simulations <= 0:
+            raise ValueError("agent simulations must be positive")
+        options = _parse_options(parts[2:])
+        if set(options) != {"prior", "rollout"}:
+            raise ValueError(
+                "puct agent must include prior=flat|heuristic and rollout=flat|biased"
+            )
+        if options["prior"] not in {"flat", "heuristic"}:
+            raise ValueError("puct prior must be flat or heuristic")
+        if options["rollout"] not in {"flat", "biased"}:
+            raise ValueError("puct rollout must be flat or biased")
+        return AgentSpec(kind, simulations, options["prior"], options["rollout"])
 
-    options: dict[str, str] = {}
-    for option in parts[2:]:
+    if kind == "neural-greedy":
+        checkpoint, device = _parse_neural_tail(parts[1:])
+        return AgentSpec(kind, checkpoint=checkpoint, device=device)
+    if kind == "neural-puct":
+        simulations = int(parts[1])
+        if simulations <= 0:
+            raise ValueError("agent simulations must be positive")
+        checkpoint, device = _parse_neural_tail(parts[2:])
+        return AgentSpec(kind, simulations=simulations, checkpoint=checkpoint, device=device)
+    raise ValueError(f"unknown agent kind: {kind}")
+
+
+def _parse_options(options: list[str]) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for option in options:
         name, separator, value = option.partition("=")
         if not separator:
-            raise ValueError("puct options must use name=value")
-        options[name] = value
-    if set(options) != {"prior", "rollout"}:
-        raise ValueError(
-            "puct agent must include prior=flat|heuristic and rollout=flat|biased"
-        )
-    if options["prior"] not in {"flat", "heuristic"}:
-        raise ValueError("puct prior must be flat or heuristic")
-    if options["rollout"] not in {"flat", "biased"}:
-        raise ValueError("puct rollout must be flat or biased")
-    return AgentSpec(kind, simulations, options["prior"], options["rollout"])
+            raise ValueError("agent options must use name=value")
+        parsed[name.lower()] = value.lower()
+    return parsed
+
+
+def _parse_neural_tail(parts: list[str]) -> tuple[str, str]:
+    if not parts:
+        raise ValueError("neural agent must include checkpoint path")
+    checkpoint = parts[0]
+    options = _parse_options(parts[1:])
+    if set(options) - {"device"}:
+        raise ValueError("neural agent only accepts device=auto|mps|cpu")
+    device = options.get("device", "auto")
+    if device not in {"auto", "mps", "cpu"}:
+        raise ValueError("neural device must be auto, mps, or cpu")
+    return checkpoint, device
 
 
 def make_agent(spec: AgentSpec, seed: int) -> ArenaAgent:
     """Create a fresh stateful agent for one arena game."""
 
     rng = random.Random(seed)
+    if spec.kind == "random":
+        return RandomPlayer(rng)
     if spec.kind == "mcts":
         return CppMctsAgent(spec.simulations, "random", rng)
     if spec.kind == "puct":
@@ -155,7 +214,27 @@ def make_agent(spec: AgentSpec, seed: int) -> ArenaAgent:
             spec.puct_prior,
             spec.puct_rollout,
         )
+    if spec.kind == "neural-greedy":
+        return NeuralGreedyAgent(_neural_evaluator(spec))
+    if spec.kind == "neural-puct":
+        return NeuralPuctPlayer(
+            _neural_evaluator(spec),
+            simulations=spec.simulations,
+            rng=rng,
+        )
     raise ValueError(f"unknown agent kind: {spec.kind}")
+
+
+def _neural_evaluator(spec: AgentSpec) -> TorchPolicyValueEvaluator:
+    if spec.checkpoint is None:
+        raise ValueError("neural agent needs a checkpoint")
+    checkpoint = str(Path(spec.checkpoint).resolve())
+    key = (checkpoint, spec.device)
+    evaluator = _NEURAL_EVALUATOR_CACHE.get(key)
+    if evaluator is None:
+        evaluator = TorchPolicyValueEvaluator(Path(checkpoint), spec.device)
+        _NEURAL_EVALUATOR_CACHE[key] = evaluator
+    return evaluator
 
 
 def play_game(
