@@ -16,7 +16,13 @@ struct NeuralEvaluation {
     int player = kPlayerOne;
 };
 
-class NeuralEvaluator {
+class NeuralEvaluatorBase {
+public:
+    virtual ~NeuralEvaluatorBase() = default;
+    virtual NeuralEvaluation evaluate(const TrackedState& state) = 0;
+};
+
+class NeuralEvaluator : public NeuralEvaluatorBase {
 public:
     explicit NeuralEvaluator(const std::string& package_path);
     ~NeuralEvaluator();
@@ -31,9 +37,27 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
+class BatchedNeuralEvaluator : public NeuralEvaluatorBase {
+public:
+    BatchedNeuralEvaluator(
+        const std::string& package_path,
+        int batch_size,
+        double wait_ms);
+    ~BatchedNeuralEvaluator();
+
+    BatchedNeuralEvaluator(const BatchedNeuralEvaluator&) = delete;
+    BatchedNeuralEvaluator& operator=(const BatchedNeuralEvaluator&) = delete;
+
+    NeuralEvaluation evaluate(const TrackedState& state);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
 class NeuralPuctMcts {
 public:
-    NeuralPuctMcts(int simulation_count, std::uint64_t seed, NeuralEvaluator& evaluator);
+    NeuralPuctMcts(int simulation_count, std::uint64_t seed, NeuralEvaluatorBase& evaluator);
 
     PuctNode* search(const TrackedState& root_state);
 
@@ -56,6 +80,6 @@ private:
 
     int simulations_;
     std::mt19937_64 rng_;
-    NeuralEvaluator& evaluator_;
+    NeuralEvaluatorBase& evaluator_;
     std::vector<std::unique_ptr<PuctNode>> nodes_;
 };

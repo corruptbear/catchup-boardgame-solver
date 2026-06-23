@@ -234,7 +234,7 @@ int choose_action(
     const AgentSpec& spec,
     const TrackedState& state,
     std::mt19937_64& rng,
-    NeuralEvaluator* neural_evaluator) {
+    NeuralEvaluatorBase* neural_evaluator) {
     if (spec.engine == Engine::Mcts) {
         Mcts search(spec.simulations, rng());
         return best_action(search.search(state));
@@ -252,6 +252,8 @@ int choose_action(
 GameRecord play_game(
     const AgentSpec& blue,
     const AgentSpec& white,
+    NeuralEvaluatorBase* blue_neural_evaluator,
+    NeuralEvaluatorBase* white_neural_evaluator,
     const std::string& blue_side,
     const std::string& white_side,
     std::uint64_t seed,
@@ -261,14 +263,6 @@ GameRecord play_game(
     TrackedState state;
     std::mt19937_64 blue_rng(seed * 2 + 1);
     std::mt19937_64 white_rng(seed * 2 + 2);
-    std::unique_ptr<NeuralEvaluator> blue_neural_evaluator;
-    std::unique_ptr<NeuralEvaluator> white_neural_evaluator;
-    if (blue.engine == Engine::NeuralPuct) {
-        blue_neural_evaluator = std::make_unique<NeuralEvaluator>(blue.model_path);
-    }
-    if (white.engine == Engine::NeuralPuct) {
-        white_neural_evaluator = std::make_unique<NeuralEvaluator>(white.model_path);
-    }
     int internal_actions = 0;
 
     while (!state.is_terminal()) {
@@ -277,10 +271,10 @@ GameRecord play_game(
         }
         if (state.current_player == kPlayerOne) {
             state.apply_action(
-                choose_action(blue, state, blue_rng, blue_neural_evaluator.get()));
+                choose_action(blue, state, blue_rng, blue_neural_evaluator));
         } else {
             state.apply_action(
-                choose_action(white, state, white_rng, white_neural_evaluator.get()));
+                choose_action(white, state, white_rng, white_neural_evaluator));
         }
         ++internal_actions;
     }
@@ -307,15 +301,52 @@ GameRecord play_game(
     return record;
 }
 
+struct ArenaNeuralEvaluators {
+    std::unique_ptr<BatchedNeuralEvaluator> agent_a_storage;
+    std::unique_ptr<BatchedNeuralEvaluator> agent_b_storage;
+    NeuralEvaluatorBase* agent_a = nullptr;
+    NeuralEvaluatorBase* agent_b = nullptr;
+};
+
+ArenaNeuralEvaluators make_neural_evaluators(
+    const AgentSpec& agent_a,
+    const AgentSpec& agent_b,
+    int batch_size,
+    double wait_ms) {
+    ArenaNeuralEvaluators evaluators;
+    if (agent_a.engine == Engine::NeuralPuct) {
+        evaluators.agent_a_storage =
+            std::make_unique<BatchedNeuralEvaluator>(agent_a.model_path, batch_size, wait_ms);
+        evaluators.agent_a = evaluators.agent_a_storage.get();
+    }
+    if (agent_b.engine == Engine::NeuralPuct) {
+        if (agent_a.engine == Engine::NeuralPuct && agent_a.model_path == agent_b.model_path) {
+            evaluators.agent_b = evaluators.agent_a;
+        } else {
+            evaluators.agent_b_storage =
+                std::make_unique<BatchedNeuralEvaluator>(agent_b.model_path, batch_size, wait_ms);
+            evaluators.agent_b = evaluators.agent_b_storage.get();
+        }
+    }
+    return evaluators;
+}
+
 std::vector<GameRecord> run_arena(
     const AgentSpec& agent_a,
     const AgentSpec& agent_b,
     int pairs,
     std::uint64_t seed,
     int max_actions,
-    int threads) {
+    int threads,
+    int neural_batch_size,
+    double neural_batch_wait_ms) {
     int worker_count = effective_thread_count(pairs, threads);
     std::vector<GameRecord> records(static_cast<std::size_t>(pairs) * 2);
+    ArenaNeuralEvaluators neural_evaluators = make_neural_evaluators(
+        agent_a,
+        agent_b,
+        neural_batch_size,
+        neural_batch_wait_ms);
     std::exception_ptr first_exception;
     std::mutex exception_mutex;
     std::vector<std::thread> workers;
@@ -331,6 +362,8 @@ std::vector<GameRecord> run_arena(
                     records[first_record] = play_game(
                         agent_a,
                         agent_b,
+                        neural_evaluators.agent_a,
+                        neural_evaluators.agent_b,
                         "A",
                         "B",
                         first_seed,
@@ -340,6 +373,8 @@ std::vector<GameRecord> run_arena(
                     records[first_record + 1] = play_game(
                         agent_b,
                         agent_a,
+                        neural_evaluators.agent_b,
+                        neural_evaluators.agent_a,
                         "B",
                         "A",
                         first_seed + 1,
@@ -554,10 +589,20 @@ int main(int argc, char** argv) {
             args,
             "threads",
             std::to_string(std::max(1u, std::thread::hardware_concurrency()))));
+        int neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
+        double neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "2.0"));
         bool json = args.find("json") != args.end();
 
         int worker_count = effective_thread_count(pairs, threads);
-        auto records = run_arena(agent_a, agent_b, pairs, seed, max_actions, threads);
+        auto records = run_arena(
+            agent_a,
+            agent_b,
+            pairs,
+            seed,
+            max_actions,
+            threads,
+            neural_batch_size,
+            neural_batch_wait_ms);
         Summary summary = summarize(records);
         if (json) {
             print_json_report(agent_a, agent_b, pairs, worker_count, seed, summary, records);

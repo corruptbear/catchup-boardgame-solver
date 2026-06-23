@@ -1,4 +1,5 @@
 #include "puct_mcts.hpp"
+#include "puct_neural.hpp"
 #include "tracked_state.hpp"
 
 #include <algorithm>
@@ -17,13 +18,22 @@
 
 namespace {
 
+enum class TeacherKind {
+    Puct,
+    NeuralPuct,
+};
+
 struct Config {
     int games = 1;
     int simulations = 1000;
     std::uint64_t seed = 0;
     int threads = 1;
     int max_actions = 512;
+    TeacherKind teacher = TeacherKind::Puct;
     PuctConfig puct_config;
+    std::string model_path;
+    int neural_batch_size = 32;
+    double neural_batch_wait_ms = 2.0;
     std::string output_path;
 };
 
@@ -100,10 +110,21 @@ Config parse_config(int argc, char** argv) {
         "threads",
         std::to_string(std::max(1u, std::thread::hardware_concurrency()))));
     config.max_actions = std::stoi(arg_or_default(args, "max-actions", "512"));
+    std::string teacher = arg_or_default(args, "teacher", "puct");
+    if (teacher == "puct") {
+        config.teacher = TeacherKind::Puct;
+    } else if (teacher == "neural-puct") {
+        config.teacher = TeacherKind::NeuralPuct;
+        config.model_path = require_arg(args, "model");
+    } else {
+        throw std::runtime_error("teacher must be puct or neural-puct");
+    }
     config.puct_config.prior = parse_puct_prior_mode(
         arg_or_default(args, "puct-prior", "heuristic"));
     config.puct_config.rollout = parse_puct_rollout_mode(
         arg_or_default(args, "puct-rollout", "biased"));
+    config.neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
+    config.neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "2.0"));
 
     if (config.games <= 0) {
         throw std::runtime_error("games must be positive");
@@ -116,6 +137,12 @@ Config parse_config(int argc, char** argv) {
     }
     if (config.max_actions <= 0) {
         throw std::runtime_error("max-actions must be positive");
+    }
+    if (config.neural_batch_size <= 0) {
+        throw std::runtime_error("neural-batch-size must be positive");
+    }
+    if (config.neural_batch_wait_ms < 0.0) {
+        throw std::runtime_error("neural-batch-wait-ms must be non-negative");
     }
     return config;
 }
@@ -158,7 +185,10 @@ int sample_action_from_root(const PuctNode* root, std::mt19937_64& rng) {
     return actions[distribution(rng)];
 }
 
-std::vector<Sample> play_game(const Config& config, int game_id) {
+std::vector<Sample> play_game(
+    const Config& config,
+    int game_id,
+    NeuralEvaluatorBase* neural_evaluator) {
     TrackedState state;
     std::mt19937_64 rng(config.seed + static_cast<std::uint64_t>(game_id));
     std::vector<Sample> samples;
@@ -174,13 +204,23 @@ std::vector<Sample> play_game(const Config& config, int game_id) {
         }
 
         std::uint64_t search_seed = rng();
-        PuctMcts search(config.simulations, search_seed, config.puct_config);
-        PuctNode* root = search.search(state);
-        int action = sample_action_from_root(root, rng);
+        int action = 0;
+        std::vector<double> policy_target;
+        if (config.teacher == TeacherKind::NeuralPuct) {
+            NeuralPuctMcts search(config.simulations, search_seed, *neural_evaluator);
+            PuctNode* root = search.search(state);
+            action = sample_action_from_root(root, rng);
+            policy_target = policy_target_from_root(root);
+        } else {
+            PuctMcts search(config.simulations, search_seed, config.puct_config);
+            PuctNode* root = search.search(state);
+            action = sample_action_from_root(root, rng);
+            policy_target = policy_target_from_root(root);
+        }
 
         samples.push_back({
             state,
-            policy_target_from_root(root),
+            policy_target,
             {},
             game_id,
             ply,
@@ -197,6 +237,13 @@ std::vector<Sample> play_game(const Config& config, int game_id) {
 std::vector<std::vector<Sample>> generate_games(const Config& config) {
     int worker_count = std::min(config.threads, config.games);
     std::vector<std::vector<Sample>> games(static_cast<std::size_t>(config.games));
+    std::unique_ptr<BatchedNeuralEvaluator> neural_evaluator;
+    if (config.teacher == TeacherKind::NeuralPuct) {
+        neural_evaluator = std::make_unique<BatchedNeuralEvaluator>(
+            config.model_path,
+            config.neural_batch_size,
+            config.neural_batch_wait_ms);
+    }
     std::vector<std::thread> workers;
     std::mutex error_mutex;
     std::optional<std::string> first_error;
@@ -206,7 +253,7 @@ std::vector<std::vector<Sample>> generate_games(const Config& config) {
         workers.emplace_back([&, worker]() {
             try {
                 for (int game_id = worker; game_id < config.games; game_id += worker_count) {
-                    games[game_id] = play_game(config, game_id);
+                    games[game_id] = play_game(config, game_id, neural_evaluator.get());
                 }
             } catch (const std::exception& exc) {
                 std::lock_guard<std::mutex> lock(error_mutex);
@@ -304,6 +351,11 @@ void write_terminal(std::ostream& out, const TerminalInfo& terminal) {
 }
 
 std::string teacher_label(const Config& config) {
+    if (config.teacher == TeacherKind::NeuralPuct) {
+        return "neural-puct:" + std::to_string(config.simulations)
+            + ":model=" + config.model_path
+            + ":batch=" + std::to_string(config.neural_batch_size);
+    }
     return "puct:" + std::to_string(config.simulations)
         + ":prior=" + puct_prior_mode_name(config.puct_config.prior)
         + ":rollout=" + puct_rollout_mode_name(config.puct_config.rollout);

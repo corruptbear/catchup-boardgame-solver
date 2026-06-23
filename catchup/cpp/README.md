@@ -89,6 +89,8 @@ Arena options:
 --seed N         base random seed
 --threads N      worker threads; default is hardware thread count capped by pairs
 --max-actions N  abort a game after N internal actions
+--neural-batch-size N     fixed neural eval batch size; default 32
+--neural-batch-wait-ms N  max wait to gather a neural batch; default 2.0
 --json           print full JSON records instead of the text summary
 ```
 
@@ -102,6 +104,10 @@ puct:N:prior=heuristic:rollout=flat        PUCT with heuristic prior and uniform
 puct:N:prior=heuristic:rollout=biased      PUCT with heuristic prior and heuristic-biased rollout
 neural-puct:N:MODEL.pt2                    neural PUCT using an AOTInductor package
 ```
+
+When either arena agent is `neural-puct`, the arena shares a batched evaluator
+across game worker threads. The model package must be exported for the same
+batch size passed with `--neural-batch-size`.
 
 Add `--json` for full game records.
 
@@ -127,12 +133,24 @@ catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 
 Options:
 
 ```text
---games N         number of self-play games
---simulations N   PUCT simulations per internal action
---threads N       worker threads; default is hardware thread count capped by games
---out PATH        JSONL output path
---puct-prior MODE flat or heuristic; default heuristic
---puct-rollout M  flat or biased; default biased
---max-actions N   abort a game after N internal actions
---seed N          optional reproducibility seed; omit for normal data generation
+--games N                 number of self-play games
+--simulations N           PUCT simulations per internal action
+--threads N               worker threads; default is hardware thread count capped by games
+--out PATH                JSONL output path
+--teacher MODE            puct or neural-puct; default puct
+--model PATH              AOTInductor package for neural-puct teacher
+--neural-batch-size N     fixed neural eval batch size; default 32
+--neural-batch-wait-ms N  max wait to gather a batch; default 2.0
+--puct-prior MODE         flat or heuristic; default heuristic
+--puct-rollout M          flat or biased; default biased
+--max-actions N           abort a game after N internal actions
+--seed N                  optional reproducibility seed; omit for normal data generation
+```
+
+For neural self-play, export a fixed-batch AOTInductor package and use the same
+batch size in the generator:
+
+```sh
+python3.10 -m catchup.training.export_aoti --checkpoint data/models/gnn_policy_value_30shards_3sym_20ep.pt --exported-program data/models/gnn_policy_value_30shards_3sym_20ep_exported_b32.pt2 --package data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --device mps --batch-size 32
+catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --out data/neural_self_play_smoke.jsonl
 ```

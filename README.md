@@ -94,6 +94,8 @@ Arena options:
 --seed N         base random seed
 --threads N      worker threads; default is hardware thread count capped by pairs
 --max-actions N  abort a game after N internal actions
+--neural-batch-size N     fixed neural eval batch size; default 32
+--neural-batch-wait-ms N  max wait to gather a neural batch; default 2.0
 --json           print full JSON records instead of the text summary
 ```
 
@@ -107,6 +109,10 @@ puct:N:prior=heuristic:rollout=flat        PUCT with heuristic prior and uniform
 puct:N:prior=heuristic:rollout=biased      PUCT with heuristic prior and heuristic-biased rollout
 neural-puct:N:MODEL.pt2                    neural PUCT using an AOTInductor package
 ```
+
+When either arena agent is `neural-puct`, the arena shares a batched evaluator
+across game worker threads. The model package must be exported for the same
+batch size passed with `--neural-batch-size`.
 
 Use `--json` to emit the full game records and summary as JSON.
 
@@ -177,16 +183,29 @@ Run the Python neural PUCT prototype from the empty board:
 python3.10 -m catchup.neural_puct --checkpoint data/models/small_policy_value_30shards_3sym.pt --simulations 100 --device mps
 ```
 
-Export a trained PyTorch model for the C++ neural arena:
+Export a batch-1 package for the standalone C++ neural solver:
 
 ```sh
 python3.10 -m catchup.training.export_aoti --checkpoint data/models/gnn_policy_value_30shards_3sym_20ep.pt --exported-program data/models/gnn_policy_value_30shards_3sym_20ep_exported.pt2 --package data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps.pt2 --device mps
 ```
 
+For batched neural arena or self-play, export a fixed-batch package:
+
+```sh
+python3.10 -m catchup.training.export_aoti --checkpoint data/models/gnn_policy_value_30shards_3sym_20ep.pt --exported-program data/models/gnn_policy_value_30shards_3sym_20ep_exported_b32.pt2 --package data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --device mps --batch-size 32
+```
+
+Then generate neural-PUCT self-play with multiple game workers sharing one
+batched evaluator:
+
+```sh
+catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --out data/neural_self_play_smoke.jsonl
+```
+
 Run the C++ neural PUCT arena agent:
 
 ```sh
-catchup/cpp/build/catchup_arena --agent-a neural-puct:100:data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps.pt2 --agent-b mcts:1000 --pairs 5 --threads 1 --seed 1
+catchup/cpp/build/catchup_arena --agent-a neural-puct:100:data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --agent-b mcts:1000 --pairs 5 --threads 8 --neural-batch-size 32 --seed 1
 ```
 
 Validate the neural agents in the existing arena:

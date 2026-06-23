@@ -5,10 +5,16 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <exception>
+#include <future>
 #include <cmath>
 #include <limits>
 #include <mutex>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 
 namespace {
@@ -19,8 +25,13 @@ constexpr int kLegalMaskOffset = kCellCount * kCellFeatureCount;
 constexpr int kScalarOffset = kLegalMaskOffset + kMaxActions;
 std::mutex loader_mutex;
 
-void write_state_features(const TrackedState& state, std::array<float, kFeatureCount>& features) {
-    features.fill(0.0F);
+torch::inductor::AOTIModelPackageLoader make_loader(const std::string& package_path) {
+    std::lock_guard<std::mutex> lock(loader_mutex);
+    return torch::inductor::AOTIModelPackageLoader(package_path, "model", false, 1, -1);
+}
+
+void write_state_features(const TrackedState& state, float* features) {
+    std::fill(features, features + kFeatureCount, 0.0F);
     int opponent = other_player(state.current_player);
 
     for (int cell = 0; cell < kCellCount; ++cell) {
@@ -47,6 +58,91 @@ void write_state_features(const TrackedState& state, std::array<float, kFeatureC
     features[kScalarOffset + 4] = state.opening_turn ? 1.0F : 0.0F;
 }
 
+std::vector<NeuralEvaluation> run_model_batch(
+    torch::inductor::AOTIModelPackageLoader& loader,
+    const std::vector<TrackedState>& states,
+    int input_rows) {
+    if (states.empty()) {
+        return {};
+    }
+    if (input_rows < static_cast<int>(states.size())) {
+        throw std::runtime_error("neural batch has more states than input rows");
+    }
+
+    std::vector<float> features(static_cast<std::size_t>(input_rows) * kFeatureCount, 0.0F);
+    std::vector<ActionList> legal_actions(states.size());
+    for (std::size_t index = 0; index < states.size(); ++index) {
+        write_state_features(states[index], features.data() + index * kFeatureCount);
+        legal_actions[index] = states[index].legal_actions();
+    }
+    for (int index = static_cast<int>(states.size()); index < input_rows; ++index) {
+        std::copy(
+            features.data(),
+            features.data() + kFeatureCount,
+            features.data() + static_cast<std::size_t>(index) * kFeatureCount);
+    }
+
+    auto input = at::from_blob(
+                     features.data(),
+                     {input_rows, kFeatureCount},
+                     at::TensorOptions().dtype(at::kFloat))
+                     .clone()
+                     .to(at::kMPS);
+
+    std::vector<at::Tensor> outputs = loader.run({input});
+    if (outputs.size() != 2) {
+        throw std::runtime_error("neural model must return policy logits and value");
+    }
+
+    auto policy = outputs[0].to(at::kCPU).contiguous();
+    auto value_tensor = outputs[1].to(at::kCPU).contiguous();
+    if (policy.size(0) < input_rows || value_tensor.size(0) < input_rows) {
+        throw std::runtime_error("neural model returned fewer rows than the configured batch size");
+    }
+
+    const float* all_logits = policy.data_ptr<float>();
+    const float* values = value_tensor.data_ptr<float>();
+    std::vector<NeuralEvaluation> evaluations;
+    evaluations.reserve(states.size());
+    for (std::size_t state_index = 0; state_index < states.size(); ++state_index) {
+        if (legal_actions[state_index].empty()) {
+            evaluations.push_back({
+                {},
+                static_cast<double>(states[state_index].result_for(states[state_index].current_player)),
+                states[state_index].current_player,
+            });
+            continue;
+        }
+
+        const float* logits = all_logits + state_index * kMaxActions;
+        double max_logit = -std::numeric_limits<double>::infinity();
+        for (std::size_t index = 0; index < legal_actions[state_index].size(); ++index) {
+            max_logit = std::max(
+                max_logit,
+                static_cast<double>(logits[legal_actions[state_index][index]]));
+        }
+
+        std::array<double, kMaxActions> priors{};
+        double total = 0.0;
+        for (std::size_t index = 0; index < legal_actions[state_index].size(); ++index) {
+            int action = legal_actions[state_index][index];
+            double weight = std::exp(static_cast<double>(logits[action]) - max_logit);
+            priors[action] = weight;
+            total += weight;
+        }
+        for (std::size_t index = 0; index < legal_actions[state_index].size(); ++index) {
+            priors[legal_actions[state_index][index]] /= total;
+        }
+
+        evaluations.push_back({
+            priors,
+            static_cast<double>(values[state_index]),
+            states[state_index].current_player,
+        });
+    }
+    return evaluations;
+}
+
 }  // namespace
 
 struct NeuralEvaluator::Impl {
@@ -54,13 +150,6 @@ struct NeuralEvaluator::Impl {
         : loader(make_loader(package_path)) {}
 
     torch::inductor::AOTIModelPackageLoader loader;
-
-private:
-    static torch::inductor::AOTIModelPackageLoader make_loader(
-        const std::string& package_path) {
-        std::lock_guard<std::mutex> lock(loader_mutex);
-        return torch::inductor::AOTIModelPackageLoader(package_path, "model", false, 1, -1);
-    }
 };
 
 NeuralEvaluator::NeuralEvaluator(const std::string& package_path)
@@ -69,61 +158,129 @@ NeuralEvaluator::NeuralEvaluator(const std::string& package_path)
 NeuralEvaluator::~NeuralEvaluator() = default;
 
 NeuralEvaluation NeuralEvaluator::evaluate(const TrackedState& state) {
-    ActionList legal_actions = state.legal_actions();
-    if (legal_actions.empty()) {
-        return {
-            {},
-            static_cast<double>(state.result_for(state.current_player)),
-            state.current_player,
-        };
-    }
+    return run_model_batch(impl_->loader, {state}, 1).front();
+}
 
-    std::array<float, kFeatureCount> features{};
-    write_state_features(state, features);
-    auto input = at::from_blob(
-                     features.data(),
-                     {1, kFeatureCount},
-                     at::TensorOptions().dtype(at::kFloat))
-                     .clone()
-                     .to(at::kMPS);
+struct BatchedNeuralEvaluator::Impl {
+    struct Request {
+        explicit Request(const TrackedState& request_state)
+            : state(request_state) {}
 
-    std::vector<at::Tensor> outputs = impl_->loader.run({input});
-    if (outputs.size() != 2) {
-        throw std::runtime_error("neural model must return policy logits and value");
-    }
-
-    auto policy = outputs[0].to(at::kCPU).contiguous();
-    auto value_tensor = outputs[1].to(at::kCPU).contiguous();
-    const float* logits = policy.data_ptr<float>();
-
-    double max_logit = -std::numeric_limits<double>::infinity();
-    for (std::size_t index = 0; index < legal_actions.size(); ++index) {
-        max_logit = std::max(max_logit, static_cast<double>(logits[legal_actions[index]]));
-    }
-
-    std::array<double, kMaxActions> priors{};
-    double total = 0.0;
-    for (std::size_t index = 0; index < legal_actions.size(); ++index) {
-        int action = legal_actions[index];
-        double weight = std::exp(static_cast<double>(logits[action]) - max_logit);
-        priors[action] = weight;
-        total += weight;
-    }
-    for (std::size_t index = 0; index < legal_actions.size(); ++index) {
-        priors[legal_actions[index]] /= total;
-    }
-
-    return {
-        priors,
-        static_cast<double>(value_tensor[0].item<float>()),
-        state.current_player,
+        TrackedState state;
+        std::promise<NeuralEvaluation> result;
     };
+
+    Impl(const std::string& package_path, int requested_batch_size, double requested_wait_ms)
+        : loader(make_loader(package_path)),
+          batch_size(requested_batch_size),
+          wait_ms(requested_wait_ms),
+          worker(&Impl::run, this) {
+        if (batch_size <= 0) {
+            throw std::runtime_error("neural batch size must be positive");
+        }
+        if (wait_ms < 0.0) {
+            throw std::runtime_error("neural batch wait must be non-negative");
+        }
+    }
+
+    ~Impl() {
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            stopping = true;
+        }
+        cv.notify_all();
+        worker.join();
+    }
+
+    NeuralEvaluation evaluate(const TrackedState& state) {
+        auto request = std::make_shared<Request>(state);
+        auto future = request->result.get_future();
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            queue.push_back(request);
+        }
+        cv.notify_one();
+        return future.get();
+    }
+
+    void run() {
+        while (true) {
+            std::vector<std::shared_ptr<Request>> batch = take_batch();
+            if (batch.empty()) {
+                return;
+            }
+
+            try {
+                std::vector<TrackedState> states;
+                states.reserve(batch.size());
+                for (const auto& request : batch) {
+                    states.push_back(request->state);
+                }
+
+                auto evaluations = run_model_batch(loader, states, batch_size);
+                for (std::size_t index = 0; index < batch.size(); ++index) {
+                    batch[index]->result.set_value(evaluations[index]);
+                }
+            } catch (...) {
+                auto error = std::current_exception();
+                for (auto& request : batch) {
+                    request->result.set_exception(error);
+                }
+            }
+        }
+    }
+
+    std::vector<std::shared_ptr<Request>> take_batch() {
+        std::unique_lock<std::mutex> lock(mutex);
+        cv.wait(lock, [&]() { return stopping || !queue.empty(); });
+        if (stopping && queue.empty()) {
+            return {};
+        }
+
+        if (!stopping && wait_ms > 0.0 && static_cast<int>(queue.size()) < batch_size) {
+            auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::duration<double, std::milli>(wait_ms);
+            cv.wait_until(lock, deadline, [&]() {
+                return stopping || static_cast<int>(queue.size()) >= batch_size;
+            });
+        }
+
+        int count = std::min<int>(batch_size, queue.size());
+        std::vector<std::shared_ptr<Request>> batch;
+        batch.reserve(count);
+        for (int index = 0; index < count; ++index) {
+            batch.push_back(queue.front());
+            queue.pop_front();
+        }
+        return batch;
+    }
+
+    torch::inductor::AOTIModelPackageLoader loader;
+    int batch_size;
+    double wait_ms;
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::deque<std::shared_ptr<Request>> queue;
+    bool stopping = false;
+    std::thread worker;
+};
+
+BatchedNeuralEvaluator::BatchedNeuralEvaluator(
+    const std::string& package_path,
+    int batch_size,
+    double wait_ms)
+    : impl_(std::make_unique<Impl>(package_path, batch_size, wait_ms)) {}
+
+BatchedNeuralEvaluator::~BatchedNeuralEvaluator() = default;
+
+NeuralEvaluation BatchedNeuralEvaluator::evaluate(const TrackedState& state) {
+    return impl_->evaluate(state);
 }
 
 NeuralPuctMcts::NeuralPuctMcts(
     int simulation_count,
     std::uint64_t seed,
-    NeuralEvaluator& evaluator)
+    NeuralEvaluatorBase& evaluator)
     : simulations_(simulation_count),
       rng_(seed),
       evaluator_(evaluator) {

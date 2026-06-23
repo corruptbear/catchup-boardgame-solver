@@ -459,7 +459,7 @@ neural-puct:N:MODEL.pt2
 Example:
 
 ```sh
-catchup/cpp/build/catchup_arena --agent-a neural-puct:100:data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps.pt2 --agent-b mcts:1000 --pairs 5 --threads 1 --seed 1
+catchup/cpp/build/catchup_arena --agent-a neural-puct:100:data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --agent-b mcts:1000 --pairs 5 --threads 8 --neural-batch-size 32 --seed 1
 ```
 
 `NeuralEvaluator` loads the AOTInductor package with
@@ -469,6 +469,51 @@ logits only over legal actions.
 
 `NeuralPuctMcts` uses the model value at each newly reached non-terminal leaf.
 There is no random rollout in this path.
+
+The arena uses `BatchedNeuralEvaluator` when either side is a neural PUCT agent.
+If both neural agents use the same model path, they share one batcher. If they
+use different model paths, each model gets its own batcher.
+
+## Batched Neural Evaluation
+
+Neural arena and self-play should batch evaluations across games, not inside one
+game's search tree. Each game thread still runs its PUCT loop in order. When a
+search needs a model evaluation, it sends the leaf state to one shared evaluator
+and waits for the result. The evaluator collects requests from multiple game
+threads, runs one MPS batch, then returns each result to the game that requested
+it.
+
+That gives this shape:
+
+```text
+game worker 0 -> leaf state ----\
+game worker 1 -> leaf state ----- shared BatchedNeuralEvaluator -> model batch
+game worker 2 -> leaf state ----/
+```
+
+This does not use virtual loss or any other within-tree synchronization trick.
+The order of decisions inside each self-play game is preserved.
+
+The current C++ generator uses the same `NeuralPuctMcts` implementation for
+single-state and batched use. The difference is only the evaluator object:
+
+```text
+NeuralEvaluator         -> one model call for one state
+BatchedNeuralEvaluator  -> one model call for several queued states
+```
+
+AOTInductor packages are exported for a fixed input batch size, so the package
+batch size must match the generator's `--neural-batch-size`. For a batch of 32:
+
+```sh
+python3.10 -m catchup.training.export_aoti --checkpoint data/models/gnn_policy_value_30shards_3sym_20ep.pt --exported-program data/models/gnn_policy_value_30shards_3sym_20ep_exported_b32.pt2 --package data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --device mps --batch-size 32
+```
+
+Generate neural self-play data with:
+
+```sh
+catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --out data/neural_self_play_smoke.jsonl
+```
 
 ## Known Gaps
 
