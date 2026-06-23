@@ -15,6 +15,10 @@
             <p id="status-line"></p>
           </div>
           <div class="actions">
+            <label class="zoom-control" for="board-zoom">
+              <span>Zoom</span>
+              <input id="board-zoom" type="range" min="60" max="120" step="5" value="100">
+            </label>
             <button id="finish-button" type="button">Finish turn</button>
             <button id="undo-button" type="button">Undo</button>
             <button id="reset-button" type="button">Reset</button>
@@ -70,6 +74,29 @@
             <span>Simulations</span>
             <input id="simulation-input" type="number" min="1" step="1" value="100">
           </label>
+          <label class="simulation-control" for="solver-select">
+            <span>Solver</span>
+            <select id="solver-select">
+              <option value="mcts">UCT MCTS</option>
+              <option value="puct">PUCT MCTS</option>
+            </select>
+          </label>
+          <div class="puct-controls">
+            <label class="simulation-control" for="puct-prior-select">
+              <span>PUCT prior</span>
+              <select id="puct-prior-select">
+                <option value="heuristic">Heuristic</option>
+                <option value="flat">Flat</option>
+              </select>
+            </label>
+            <label class="simulation-control" for="puct-rollout-select">
+              <span>PUCT rollout</span>
+              <select id="puct-rollout-select">
+                <option value="biased">Biased</option>
+                <option value="flat">Flat</option>
+              </select>
+            </label>
+          </div>
           <button id="suggestion-button" type="button">Get suggested action</button>
           <p id="suggestion-output"></p>
           <div id="suggestion-choices" class="suggestion-choices"></div>

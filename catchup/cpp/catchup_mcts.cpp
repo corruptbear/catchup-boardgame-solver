@@ -1,5 +1,6 @@
 #include "board.hpp"
 #include "mcts.hpp"
+#include "puct_mcts.hpp"
 #include "tracked_state.hpp"
 
 #include <algorithm>
@@ -36,6 +37,17 @@ std::string require_arg(
     auto found = args.find(name);
     if (found == args.end()) {
         throw std::runtime_error("missing argument: " + name);
+    }
+    return found->second;
+}
+
+std::string arg_or_default(
+    const std::unordered_map<std::string, std::string>& args,
+    const std::string& name,
+    const std::string& default_value) {
+    auto found = args.find(name);
+    if (found == args.end()) {
+        return default_value;
     }
     return found->second;
 }
@@ -105,7 +117,7 @@ std::vector<std::pair<int, Node*>> sorted_choices(const Node* root) {
     return choices;
 }
 
-void print_result(const Node* root, int simulations) {
+void print_result(const Node* root, int simulations, const std::string& engine) {
     auto choices = sorted_choices(root);
     if (choices.empty()) {
         throw std::runtime_error("search produced no choices");
@@ -115,6 +127,65 @@ void print_result(const Node* root, int simulations) {
     std::cout << "\"action\":" << choices.front().first << ",";
     std::cout << "\"player\":" << static_cast<int>(root->state.current_player) << ",";
     std::cout << "\"simulations\":" << simulations << ",";
+    std::cout << "\"engine\":\"" << engine << "\",";
+    std::cout << "\"state_mode\":\"tracked\",";
+    std::cout << "\"choices\":[";
+    for (std::size_t index = 0; index < choices.size(); ++index) {
+        auto [action, child] = choices[index];
+        if (index != 0) {
+            std::cout << ",";
+        }
+        double value = child->visits == 0 ? 0.0 : child->mean_value();
+        if (child->state.current_player != root->state.current_player) {
+            value = -value;
+        }
+        std::cout << "{";
+        std::cout << "\"action\":" << action << ",";
+        std::cout << "\"visits\":" << child->visits << ",";
+        std::cout << "\"value\":" << value;
+        std::cout << "}";
+    }
+    std::cout << "]}";
+}
+
+std::vector<std::pair<int, PuctNode*>> sorted_puct_choices(const PuctNode* root) {
+    std::vector<std::pair<int, PuctNode*>> choices;
+    choices.reserve(root->children.size());
+    for (const auto& edge : root->children) {
+        choices.push_back({
+            static_cast<int>(edge.action),
+            edge.child,
+        });
+    }
+    std::sort(
+        choices.begin(),
+        choices.end(),
+        [](const auto& first, const auto& second) {
+            if (first.second->visits != second.second->visits) {
+                return first.second->visits > second.second->visits;
+            }
+            return first.first < second.first;
+        });
+    return choices;
+}
+
+void print_result(
+    const PuctNode* root,
+    int simulations,
+    const std::string& engine,
+    PuctConfig config) {
+    auto choices = sorted_puct_choices(root);
+    if (choices.empty()) {
+        throw std::runtime_error("search produced no choices");
+    }
+
+    std::cout << "{";
+    std::cout << "\"action\":" << choices.front().first << ",";
+    std::cout << "\"player\":" << static_cast<int>(root->state.current_player) << ",";
+    std::cout << "\"simulations\":" << simulations << ",";
+    std::cout << "\"engine\":\"" << engine << "\",";
+    std::cout << "\"puct_prior\":\"" << puct_prior_mode_name(config.prior) << "\",";
+    std::cout << "\"puct_rollout\":\"" << puct_rollout_mode_name(config.rollout) << "\",";
     std::cout << "\"state_mode\":\"tracked\",";
     std::cout << "\"choices\":[";
     for (std::size_t index = 0; index < choices.size(); ++index) {
@@ -146,10 +217,27 @@ int main(int argc, char** argv) {
         if (seed_arg != args.end()) {
             seed = static_cast<std::uint64_t>(std::stoull(seed_arg->second));
         }
+        std::string engine = "random";
+        auto engine_arg = args.find("engine");
+        if (engine_arg != args.end()) {
+            engine = engine_arg->second;
+        }
         TrackedState state = state_from_args(args);
-        Mcts mcts(simulations, seed);
-        Node* root = mcts.search(state);
-        print_result(root, simulations);
+        if (engine == "random") {
+            Mcts mcts(simulations, seed);
+            Node* root = mcts.search(state);
+            print_result(root, simulations, engine);
+        } else if (engine == "puct") {
+            PuctConfig config{
+                parse_puct_prior_mode(arg_or_default(args, "puct-prior", "heuristic")),
+                parse_puct_rollout_mode(arg_or_default(args, "puct-rollout", "biased")),
+            };
+            PuctMcts mcts(simulations, seed, config);
+            PuctNode* root = mcts.search(state);
+            print_result(root, simulations, engine, config);
+        } else {
+            throw std::runtime_error("unknown engine: " + engine);
+        }
         std::cout << "\n";
         return 0;
     } catch (const std::exception& exc) {

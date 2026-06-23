@@ -6,8 +6,12 @@ const board = document.querySelector("#board");
 const finishButton = document.querySelector("#finish-button");
 const undoButton = document.querySelector("#undo-button");
 const resetButton = document.querySelector("#reset-button");
+const boardZoom = document.querySelector("#board-zoom");
 const suggestionButton = document.querySelector("#suggestion-button");
 const simulationInput = document.querySelector("#simulation-input");
+const solverSelect = document.querySelector("#solver-select");
+const puctPriorSelect = document.querySelector("#puct-prior-select");
+const puctRolloutSelect = document.querySelector("#puct-rollout-select");
 const suggestionOutput = document.querySelector("#suggestion-output");
 const suggestionChoices = document.querySelector("#suggestion-choices");
 const statusLine = document.querySelector("#status-line");
@@ -29,6 +33,12 @@ let state = null;
 let suggestionText = "";
 let suggestionRows = [];
 let suggestionLoading = false;
+
+function applyBoardZoom() {
+  const zoom = Math.max(60, Math.min(120, Number.parseInt(boardZoom.value, 10) || 100));
+  boardZoom.value = String(zoom);
+  board.style.setProperty("--board-zoom", `${zoom}%`);
+}
 
 function centerFor(cell) {
   return {
@@ -94,13 +104,21 @@ async function requestSuggestion() {
 
   const requestedSimulations = Math.max(1, Number.parseInt(simulationInput.value, 10) || 1);
   simulationInput.value = String(requestedSimulations);
+  const solver = solverSelect.value;
+  const puctPrior = puctPriorSelect.value;
+  const puctRollout = puctRolloutSelect.value;
   suggestionLoading = true;
   render();
   try {
     const response = await fetch("/api/suggest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ simulations: requestedSimulations }),
+      body: JSON.stringify({
+        simulations: requestedSimulations,
+        solver,
+        puct_prior: puctPrior,
+        puct_rollout: puctRollout,
+      }),
     });
     const payload = await response.json();
     state = payload.state;
@@ -228,8 +246,12 @@ function renderEmptyRegions() {
 }
 
 function renderSuggestion() {
+  const isPuct = solverSelect.value === "puct";
   suggestionButton.disabled = state.terminal || suggestionLoading;
   simulationInput.disabled = suggestionLoading;
+  solverSelect.disabled = suggestionLoading;
+  puctPriorSelect.disabled = suggestionLoading || !isPuct;
+  puctRolloutSelect.disabled = suggestionLoading || !isPuct;
   suggestionOutput.textContent = suggestionLoading ? "Evaluating..." : suggestionText;
   suggestionChoices.replaceChildren();
 
@@ -282,4 +304,7 @@ finishButton.addEventListener("click", () => postJson("/api/action", { action: s
 undoButton.addEventListener("click", () => postJson("/api/undo"));
 resetButton.addEventListener("click", () => postJson("/api/reset"));
 suggestionButton.addEventListener("click", () => requestSuggestion());
+solverSelect.addEventListener("change", () => render());
+boardZoom.addEventListener("input", () => applyBoardZoom());
+applyBoardZoom();
 loadState();

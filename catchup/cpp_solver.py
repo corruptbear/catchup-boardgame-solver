@@ -26,10 +26,13 @@ def cpp_solver_args(
     state: GameState,
     simulations: int,
     seed: int = 1,
+    engine: str = "random",
+    puct_prior: str | None = None,
+    puct_rollout: str | None = None,
 ) -> list[str]:
     """Build argv for the C++ solver from a Python game state."""
 
-    return [
+    args = [
         "--owners",
         ",".join(str(owner) for owner in state.tracker.cell_owners),
         "--selected",
@@ -49,12 +52,22 @@ def cpp_solver_args(
         "--seed",
         str(seed),
     ]
+    if engine != "random":
+        args.extend(["--engine", engine])
+    if puct_prior is not None:
+        args.extend(["--puct-prior", puct_prior])
+    if puct_rollout is not None:
+        args.extend(["--puct-rollout", puct_rollout])
+    return args
 
 
 def suggest_with_cpp_mcts(
     state: GameState,
     simulations: int,
     seed: int = 1,
+    engine: str = "random",
+    puct_prior: str | None = None,
+    puct_rollout: str | None = None,
 ) -> dict[str, Any] | None:
     """Return C++ MCTS JSON output, or None when the binary is not built."""
 
@@ -62,7 +75,10 @@ def suggest_with_cpp_mcts(
     if binary is None:
         return None
 
-    command = [str(binary), *cpp_solver_args(state, simulations, seed)]
+    command = [
+        str(binary),
+        *cpp_solver_args(state, simulations, seed, engine, puct_prior, puct_rollout),
+    ]
     completed = subprocess.run(
         command,
         capture_output=True,

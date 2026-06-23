@@ -22,6 +22,10 @@ from .solvers import MCTSPlayer
 STATIC_DIR = Path(__file__).with_name("static")
 SUGGESTION_SIMULATIONS = 100
 SUGGESTION_SEED_RNG = random.SystemRandom()
+SOLVER_MCTS = "mcts"
+SOLVER_PUCT = "puct"
+PUCT_PRIORS = {"flat", "heuristic"}
+PUCT_ROLLOUTS = {"flat", "biased"}
 PLAYER_NAMES = {
     PLAYER_ONE: "Blue",
     PLAYER_TWO: "White",
@@ -204,13 +208,37 @@ class GameSession:
                 self._message = "Nothing to undo."
             return state_payload(self._state, self._message)
 
-    def suggest_action(self, simulations: int = SUGGESTION_SIMULATIONS) -> dict[str, Any]:
+    def suggest_action(
+        self,
+        simulations: int = SUGGESTION_SIMULATIONS,
+        solver: str = SOLVER_MCTS,
+        puct_prior: str = "heuristic",
+        puct_rollout: str = "biased",
+    ) -> dict[str, Any]:
+        if simulations <= 0:
+            raise ValueError("simulations must be positive")
+        if solver not in {SOLVER_MCTS, SOLVER_PUCT}:
+            raise ValueError("solver must be mcts or puct")
+        if puct_prior not in PUCT_PRIORS:
+            raise ValueError("puct prior must be flat or heuristic")
+        if puct_rollout not in PUCT_ROLLOUTS:
+            raise ValueError("puct rollout must be flat or biased")
+
         with self._lock:
             state = self._state.copy()
 
         seed = SUGGESTION_SEED_RNG.randrange(1, 2**63)
-        cpp_result = suggest_with_cpp_mcts(state, simulations, seed=seed)
+        cpp_result = suggest_with_cpp_mcts(
+            state,
+            simulations,
+            seed=seed,
+            engine="puct" if solver == SOLVER_PUCT else "random",
+            puct_prior=puct_prior if solver == SOLVER_PUCT else None,
+            puct_rollout=puct_rollout if solver == SOLVER_PUCT else None,
+        )
         if cpp_result is None:
+            if solver == SOLVER_PUCT:
+                raise RuntimeError("PUCT suggestions require the C++ solver binary")
             engine = "python"
             player = MCTSPlayer(simulations=simulations, rng=random.Random(seed))
             root = player.search(state)
@@ -223,7 +251,14 @@ class GameSession:
             )
             action = choices[0]["action"]
         else:
-            engine = f"cpp/{cpp_result.get('state_mode', 'unknown')}"
+            if cpp_result.get("engine") == "puct":
+                engine = (
+                    "cpp/puct"
+                    f"/prior={cpp_result.get('puct_prior', puct_prior)}"
+                    f"/rollout={cpp_result.get('puct_rollout', puct_rollout)}"
+                )
+            else:
+                engine = "cpp/mcts"
             choices = [
                 _choice_from_cpp_result(state, choice)
                 for choice in cpp_result["choices"]
@@ -235,6 +270,10 @@ class GameSession:
         suggestion["player_name"] = PLAYER_NAMES[state.current_player]
         suggestion["simulations"] = simulations
         suggestion["engine"] = engine
+        suggestion["solver"] = solver
+        if solver == SOLVER_PUCT:
+            suggestion["puct_prior"] = puct_prior
+            suggestion["puct_rollout"] = puct_rollout
         suggestion["seed"] = seed
 
         with self._lock:
@@ -304,7 +343,17 @@ class CatchupRequestHandler(BaseHTTPRequestHandler):
             elif self.path == "/api/suggest":
                 data = self._read_json()
                 simulations = int(data.get("simulations", SUGGESTION_SIMULATIONS))
-                self._send_json(self.session.suggest_action(simulations))
+                solver = str(data.get("solver", SOLVER_MCTS))
+                puct_prior = str(data.get("puct_prior", "heuristic"))
+                puct_rollout = str(data.get("puct_rollout", "biased"))
+                self._send_json(
+                    self.session.suggest_action(
+                        simulations,
+                        solver=solver,
+                        puct_prior=puct_prior,
+                        puct_rollout=puct_rollout,
+                    )
+                )
             elif self.path == "/api/reset":
                 self._send_json(self.session.reset())
             elif self.path == "/api/undo":

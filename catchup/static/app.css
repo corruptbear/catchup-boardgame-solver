@@ -48,9 +48,11 @@ button:not(:disabled):hover {
   border-color: var(--accent);
 }
 
-input {
+input,
+select {
   border: 1px solid var(--line);
   border-radius: 6px;
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
   min-height: 36px;
@@ -116,10 +118,28 @@ h2 {
 }
 
 .actions {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.zoom-control {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.zoom-control span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.zoom-control input {
+  width: 120px;
 }
 
 #finish-button:not(:disabled) {
@@ -131,7 +151,9 @@ h2 {
 #board {
   height: 100%;
   min-height: 590px;
-  width: 100%;
+  justify-self: center;
+  max-width: 100%;
+  width: var(--board-zoom, 100%);
 }
 
 .side-panel {
@@ -254,6 +276,7 @@ dd {
 .simulation-control {
   display: grid;
   gap: 6px;
+  margin-bottom: 8px;
 }
 
 .simulation-control span {
@@ -261,6 +284,12 @@ dd {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.puct-controls {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
 }
 
 #suggestion-output {

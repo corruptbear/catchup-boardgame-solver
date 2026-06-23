@@ -76,7 +76,7 @@ class UiServerTest(unittest.TestCase):
         self.assertEqual(suggestion["player_name"], PLAYER_NAMES[PLAYER_ONE])
         self.assertEqual(suggestion["simulations"], 4)
         self.assertIsInstance(suggestion["seed"], int)
-        self.assertIn(suggestion["engine"], ("cpp/tracked", "python"))
+        self.assertIn(suggestion["engine"], ("cpp/mcts", "python"))
         self.assertIn("Claim #", suggestion["label"])
         self.assertEqual(suggestion["action"], choices[0]["action"])
         self.assertEqual(sum(choice["visits"] for choice in choices), 4)
@@ -89,7 +89,9 @@ class UiServerTest(unittest.TestCase):
 
     def test_session_suggest_action_falls_back_to_python_mcts(self) -> None:
         original = ui_server.suggest_with_cpp_mcts
-        ui_server.suggest_with_cpp_mcts = lambda state, simulations, seed=1: None
+        ui_server.suggest_with_cpp_mcts = (
+            lambda state, simulations, seed=1, engine="random", puct_prior=None, puct_rollout=None: None
+        )
         try:
             payload = GameSession().suggest_action(simulations=4)
         finally:
@@ -102,11 +104,19 @@ class UiServerTest(unittest.TestCase):
         original = ui_server.suggest_with_cpp_mcts
         seeds = []
 
-        def fake_cpp_suggest(state, simulations, seed=1):
+        def fake_cpp_suggest(
+            state,
+            simulations,
+            seed=1,
+            engine="random",
+            puct_prior=None,
+            puct_rollout=None,
+        ):
             seeds.append(seed)
             return {
                 "action": 0,
                 "choices": [{"action": 0, "visits": simulations, "value": 0.0}],
+                "engine": engine,
                 "state_mode": "tracked",
             }
 
@@ -121,6 +131,56 @@ class UiServerTest(unittest.TestCase):
         self.assertNotEqual(seeds[0], seeds[1])
         self.assertEqual(first["suggestion"]["seed"], seeds[0])
         self.assertEqual(second["suggestion"]["seed"], seeds[1])
+
+    def test_session_suggest_action_passes_puct_options(self) -> None:
+        original = ui_server.suggest_with_cpp_mcts
+        calls = []
+
+        def fake_cpp_suggest(
+            state,
+            simulations,
+            seed=1,
+            engine="random",
+            puct_prior=None,
+            puct_rollout=None,
+        ):
+            calls.append((engine, puct_prior, puct_rollout))
+            return {
+                "action": 0,
+                "choices": [{"action": 0, "visits": simulations, "value": 0.0}],
+                "engine": engine,
+                "puct_prior": puct_prior,
+                "puct_rollout": puct_rollout,
+                "state_mode": "tracked",
+            }
+
+        ui_server.suggest_with_cpp_mcts = fake_cpp_suggest
+        try:
+            payload = GameSession().suggest_action(
+                simulations=4,
+                solver="puct",
+                puct_prior="flat",
+                puct_rollout="biased",
+            )
+        finally:
+            ui_server.suggest_with_cpp_mcts = original
+
+        self.assertEqual(calls, [("puct", "flat", "biased")])
+        self.assertEqual(payload["suggestion"]["solver"], "puct")
+        self.assertEqual(payload["suggestion"]["puct_prior"], "flat")
+        self.assertEqual(payload["suggestion"]["puct_rollout"], "biased")
+        self.assertEqual(payload["suggestion"]["engine"], "cpp/puct/prior=flat/rollout=biased")
+
+    def test_session_suggest_action_rejects_puct_without_cpp(self) -> None:
+        original = ui_server.suggest_with_cpp_mcts
+        ui_server.suggest_with_cpp_mcts = (
+            lambda state, simulations, seed=1, engine="random", puct_prior=None, puct_rollout=None: None
+        )
+        try:
+            with self.assertRaises(RuntimeError):
+                GameSession().suggest_action(simulations=4, solver="puct")
+        finally:
+            ui_server.suggest_with_cpp_mcts = original
 
     def test_action_description_formats_finish_and_claim(self) -> None:
         state = GameState.new()

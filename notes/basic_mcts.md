@@ -97,8 +97,8 @@ child mean from White perspective = +0.333
 same child from Blue parent's view = -0.333
 ```
 
-The root is just one place where this happens. The same conversion is used at
-every fully expanded non-terminal node during the selection walk.
+The root is just one place where this happens. The same conversion is used
+whenever selection compares the children of a fully expanded non-terminal node.
 
 So `total_value` and `mean_value()` always belong to the node's player to move.
 When a parent compares children, each child value is interpreted from the
@@ -125,15 +125,16 @@ selection -> expansion -> simulation -> backpropagation
 After the loop, the chosen action is the root child with the most visits, with
 converted mean value used as a tiebreaker.
 
-## 1. Selection
+### 1. Selection
 
-Selection builds one path starting at the root. At each node, including the
-root:
+Selection starts at the root. At each node, including the root, apply these
+cases in order:
 
 ```text
-terminal node             -> stop
-node with untried actions -> stop; expansion will add one child here
+terminal node             -> selection ends here
+node with untried actions -> selection ends here; expansion will add one child
 fully expanded node       -> use UCT to choose one child, then continue
+                             selection from that child
 ```
 
 The selected node is the last node in this path. In loop form:
@@ -142,8 +143,8 @@ The selected node is the last node in this path. In loop form:
 start at root
 while current node is non-terminal and fully expanded:
     use UCT to choose one child
-    move to that child
-stop at a node with untried actions, or at a terminal node
+    continue selection from that child
+selection ends at a node with untried actions, or at a terminal node
 ```
 
 UCT is not only a root rule. It is used at every fully expanded non-terminal
@@ -182,9 +183,9 @@ children have positive-infinity score, they are tied for best score, and one of
 them is chosen randomly. The same random tie-break is used for any other equal
 best scores.
 
-## 2. Expansion
+### 2. Expansion
 
-Expansion happens at the node where selection stops. This node is the selected
+Expansion happens at the node where selection ends. This node is the selected
 node for the current simulation. If it still has untried legal actions,
 expansion creates one child from it.
 
@@ -196,7 +197,7 @@ Steps:
 4. Apply the action to the copy.
 5. Create a child node for the resulting state.
 6. Add the child to the parent's `children`.
-7. Continue the simulation from this new child.
+7. Start rollout from this new child.
 
 Expansion must not mutate the selected node's state, because that node may be
 visited again in later simulations. Instead, it copies the selected state first,
@@ -207,10 +208,11 @@ starts.
 If the selected node is terminal, expansion is skipped. Otherwise, the selected
 node should have at least one untried action, so expansion creates one child.
 
-## 3. Simulation (Rollout)
+### 3. Simulation (Rollout)
 
 Simulation, also called rollout or playout, estimates the value of the newly
-selected/expanded node.
+expanded child. If selection ended at a terminal node, expansion and rollout are
+skipped; the terminal result is backed up directly.
 
 The current C++ solver does:
 
@@ -268,9 +270,10 @@ node visits = all simulations whose selected path passed through this node
 node value  = rollout results backed up through this node
 ```
 
-## 4. Backpropagation
+### 4. Backpropagation
 
-Backpropagation walks back through the path from the rollout node to the root.
+Backpropagation iterates backward through the selected path, from the rollout
+node to the root.
 
 For every node on that path:
 
@@ -336,7 +339,7 @@ root.untried_actions = [A, B, C]
 ```
 
 Simulation 1 starts at the root. The root still has untried actions, so
-selection stops immediately at the root. Expansion chooses one untried action,
+selection ends immediately at the root. Expansion chooses one untried action,
 say `A`, copies the root state, applies `A` to the copy, and stores the result
 as child node `A`.
 
@@ -349,7 +352,7 @@ The rollout starts from node `A`, plays random actions until terminal, and
 backpropagation updates both `A` and `ROOT`.
 
 Simulation 2 starts again at the root. The root still has untried actions, so
-selection again stops at the root. Expansion might choose `C` this time:
+selection again ends at the root. Expansion might choose `C` this time:
 
 ```text
 ROOT
@@ -379,7 +382,7 @@ When ROOT calculates UCT, it compares child values from ROOT's
 player-to-move perspective. If a child stores value from a different player's
 perspective, that value is converted before the UCT score is computed.
 
-If node `A` still has untried actions, selection stops at `A`, and expansion
+If node `A` still has untried actions, selection ends at `A`, and expansion
 adds one child below `A`, say `A1`:
 
 ```text
@@ -397,7 +400,7 @@ A1 -> A -> ROOT
 ```
 
 Later, if UCT selects `A` again and `A` is fully expanded, selection continues
-inside `A`. UCT then chooses among `A`'s children:
+from `A`. UCT then chooses among `A`'s children:
 
 ```text
 a later simulation: ROOT uses UCT and selects A
@@ -405,19 +408,19 @@ a later simulation: ROOT uses UCT and selects A
                     A uses UCT and selects A1
 ```
 
-So the selection walk is recursive. It starts at the root, but every fully
-expanded node on the path uses the same rule: compare its children with UCT,
-move to the chosen child, and continue until reaching a terminal node or a node
-with an untried action.
+So selection is recursive. It starts at the root, but every fully expanded node
+on the path uses the same rule: compare its children with UCT, move to the
+chosen child, and continue selection from there. Selection ends when it reaches
+a terminal node or a node with an untried action.
 
-Terminal nodes are handled as a special stop case. Suppose a later selection
-walk reaches child `B`, and `B` is already terminal:
+Terminal nodes are handled as a special end case. Suppose a later selection
+path reaches child `B`, and `B` is already terminal:
 
 ```text
 ROOT -> B
 ```
 
-Selection stops at `B`. Expansion is skipped because terminal nodes have no
+Selection ends at `B`. Expansion is skipped because terminal nodes have no
 legal actions to expand. Simulation is also unnecessary because the result is
 already known. Backpropagation immediately backs up `B`'s terminal result along
 the selected path:
