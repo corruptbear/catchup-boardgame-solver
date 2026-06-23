@@ -24,6 +24,7 @@ The binary is written to:
 ```text
 catchup/cpp/build/catchup_mcts
 catchup/cpp/build/catchup_arena
+catchup/cpp/build/catchup_self_play
 ```
 
 The Python bridge in `catchup/cpp_solver.py` looks for that binary by default.
@@ -99,3 +100,35 @@ puct:N:prior=heuristic:rollout=biased      PUCT with heuristic prior and heurist
 ```
 
 Add `--json` for full game records.
+
+## Self-Play Data Generation
+
+The C++ self-play generator is the preferred path for bootstrap policy/value
+data because it runs whole games in one process and calls PUCT directly.
+Each JSONL row includes the position, policy target, value target, and terminal
+game summary for the completed self-play game.
+
+Tiny smoke run:
+
+```sh
+catchup/cpp/build/catchup_self_play --games 2 --simulations 100 --out data/bootstrap_smoke.jsonl
+```
+
+Parallel run on a 12-core machine:
+
+```sh
+catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --out data/bootstrap_50g_10k.jsonl
+```
+
+Options:
+
+```text
+--games N         number of self-play games
+--simulations N   PUCT simulations per internal action
+--threads N       worker threads; default is hardware thread count capped by games
+--out PATH        JSONL output path
+--puct-prior MODE flat or heuristic; default heuristic
+--puct-rollout M  flat or biased; default biased
+--max-actions N   abort a game after N internal actions
+--seed N          optional reproducibility seed; omit for normal data generation
+```

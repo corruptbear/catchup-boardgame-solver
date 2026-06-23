@@ -159,17 +159,17 @@ selection chooses an edge with no child yet, expansion:
 If selection ended at a terminal node, expansion is skipped and there is no
 rollout. The terminal result is backed up directly.
 
-The difference from the previous PUCT implementation is:
+Compared with textbook UCT-style expansion:
 
 ```text
-Before:
+UCT-style:
 selection stops at node S because S has untried actions
 expansion chooses one untried action
 create child for that action
 rollout from child
 backup
 
-Now:
+PUCT edge style:
 node S already has all legal action edges
 selection at S scores those edges with PUCT
 if selected edge has no child:
@@ -181,19 +181,19 @@ if selected edge has no child:
 Implication for search behavior:
 
 ```text
-Before:
-first visits at a node were forced by prior rank
-high-prior action, then next-highest-prior action, then next-highest...
+UCT-style:
+first visits at a node are forced through the untried-action expansion queue
+the search gives each newly expanded action one rollout before comparing it later
 
-Now:
+PUCT edge style:
 first visits are chosen by the full PUCT score
 a high-prior action can receive multiple visits before a lower-prior action
 if its Q plus exploration remains better
 ```
 
 So the change is small structurally, but it matters most at low-visit nodes.
-The search is less like a prior-sorted expansion queue and more like normal
-PUCT edge selection from the first revisit of a node.
+The search is less like an untried-action expansion queue and more like normal
+PUCT edge selection once a node has been initialized.
 
 Example:
 
@@ -291,6 +291,62 @@ for each node on the path, from leaf to root:
 If a future evaluator returns a non-terminal value instead of a terminal
 rollout result, the backup rule stays the same in shape, but backs up that leaf
 value from the correct player perspective.
+
+## Neural Self-Play Loop
+
+In the current non-neural PUCT, a simulation reaches a new child and then uses a
+rollout to play the game to the end:
+
+```text
+selection reaches a new child
+rollout plays flat or biased random actions until terminal
+terminal result is backed up
+```
+
+In AlphaZero-style neural PUCT, a simulation does not roll out to terminal.
+Instead, it stops at the first new leaf state and runs neural inference once:
+
+```text
+selection reaches a new leaf state
+neural_net(leaf_state) -> policy priors P(a), value V(leaf_state)
+store P(a) on the leaf's legal action edges
+back up V(leaf_state)
+```
+
+So neural PUCT repeatedly calls the network while building the tree. For one
+real self-play move:
+
+```text
+for simulation in 1..N:
+    walk the current tree by PUCT
+    reach a leaf
+    run neural inference for that leaf
+    back up the returned value
+
+policy target for training = normalized root visit counts
+actual self-play move      = sample or argmax from root visit counts
+advance the real game
+```
+
+With `N` simulations for one move, this can mean up to `N` neural evaluations
+for that move, usually one new leaf evaluation per simulation. This is why
+batched inference matters later, even though the first implementation can be
+simple and unbatched.
+
+Each saved training example is:
+
+```text
+state features
+policy target from root visits over the 62 internal actions
+final game result from the saved state's player-to-move perspective
+```
+
+The training loss is the usual AlphaZero shape:
+
+```text
+policy loss: cross entropy between network policy and visit-count target
+value loss:  error between network value and final game result
+```
 
 ## Current Status
 

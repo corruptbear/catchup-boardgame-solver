@@ -13,6 +13,7 @@ catchup/
   components.py     incremental component tracking
   game.py           Catchup rules and game state
   solvers.py        Python random players and MCTS fallback
+  training/         self-play data generation for policy/value experiments
   ui_server.py      local browser UI server
   static/           HTML/CSS/JS for the UI
   cpp/              C++ MCTS solver and headless arena
@@ -33,6 +34,7 @@ This creates:
 ```text
 catchup/cpp/build/catchup_mcts
 catchup/cpp/build/catchup_arena
+catchup/cpp/build/catchup_self_play
 ```
 
 The Python server looks for that binary automatically. To use a different
@@ -106,6 +108,43 @@ puct:N:prior=heuristic:rollout=biased      PUCT with heuristic prior and heurist
 ```
 
 Use `--json` to emit the full game records and summary as JSON.
+
+## Generate Bootstrap Training Data
+
+Build the C++ solver first:
+
+```sh
+make -C catchup/cpp
+```
+
+Then run a tiny C++ self-play smoke generation:
+
+```sh
+catchup/cpp/build/catchup_self_play --games 2 --simulations 100 --out data/bootstrap_smoke.jsonl
+```
+
+The generator uses PUCT with heuristic priors and biased rollouts by default.
+Each JSONL row stores a state snapshot, a 62-action policy target from root
+visit counts, and the final value target from that state's player-to-move
+perspective. It also stores terminal game metadata: winner, final component
+sizes, filled cells, and completed turns.
+
+Use `--threads N` to run independent self-play games in parallel. On a 12-core
+machine:
+
+```sh
+catchup/cpp/build/catchup_self_play --games 12 --simulations 100 --threads 12 --out data/bootstrap_parallel_smoke.jsonl
+```
+
+For real bootstrap data, use a larger budget only after the smoke output looks
+right, for example:
+
+```sh
+catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --out data/bootstrap_50g_10k.jsonl
+```
+
+Normal data generation omits `--seed`, so each run uses fresh randomness.
+Pass `--seed N` only when you intentionally want reproducible debugging output.
 
 ## Run Tests
 

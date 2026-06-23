@@ -5,11 +5,12 @@ THREAD_FLAGS ?= -pthread
 BUILD_DIR := build
 MCTS_TARGET := $(BUILD_DIR)/catchup_mcts
 ARENA_TARGET := $(BUILD_DIR)/catchup_arena
+SELF_PLAY_TARGET := $(BUILD_DIR)/catchup_self_play
 COMMON_SOURCES := board.cpp tracked_state.cpp mcts.cpp puct_mcts.cpp
 
 .PHONY: all clean
 
-all: $(MCTS_TARGET) $(ARENA_TARGET)
+all: $(MCTS_TARGET) $(ARENA_TARGET) $(SELF_PLAY_TARGET)
 
 $(MCTS_TARGET): catchup_mcts.cpp $(COMMON_SOURCES)
 	mkdir -p $(BUILD_DIR)
@@ -18,6 +19,10 @@ $(MCTS_TARGET): catchup_mcts.cpp $(COMMON_SOURCES)
 $(ARENA_TARGET): arena.cpp $(COMMON_SOURCES)
 	mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(THREAD_FLAGS) arena.cpp $(COMMON_SOURCES) -o $@
+
+$(SELF_PLAY_TARGET): self_play.cpp $(COMMON_SOURCES)
+	mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(THREAD_FLAGS) self_play.cpp $(COMMON_SOURCES) -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)
