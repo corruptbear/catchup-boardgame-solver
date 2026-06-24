@@ -41,6 +41,11 @@ struct AgentSpec {
     std::string label;
 };
 
+struct ActionSelectionByAgent {
+    ActionSelection agent_a = ActionSelection::MaxVisits;
+    ActionSelection agent_b = ActionSelection::MaxVisits;
+};
+
 struct GameRecord {
     int pair_index = 0;
     int game_index = 0;
@@ -199,11 +204,21 @@ ActionSelection parse_action_selection(const std::string& text) {
     if (text == "sample") {
         return ActionSelection::SampleVisits;
     }
-    throw std::runtime_error("action-selection must be max or sample");
+    throw std::runtime_error("action selection must be max or sample");
 }
 
 std::string action_selection_label(ActionSelection action_selection) {
     return action_selection == ActionSelection::SampleVisits ? "sample" : "max";
+}
+
+ActionSelectionByAgent default_action_selection(
+    const AgentSpec& agent_a,
+    const AgentSpec& agent_b) {
+    ActionSelection default_selection =
+        agent_a.engine == Engine::NeuralPuct && agent_b.engine == Engine::NeuralPuct
+        ? ActionSelection::SampleVisits
+        : ActionSelection::MaxVisits;
+    return {default_selection, default_selection};
 }
 
 int effective_thread_count(int pairs, int threads) {
@@ -334,7 +349,8 @@ GameRecord play_game(
     int pair_index,
     int game_index,
     int max_actions,
-    ActionSelection action_selection) {
+    ActionSelection blue_action_selection,
+    ActionSelection white_action_selection) {
     TrackedState state;
     std::mt19937_64 blue_rng(seed * 2 + 1);
     std::mt19937_64 white_rng(seed * 2 + 2);
@@ -346,10 +362,20 @@ GameRecord play_game(
         }
         if (state.current_player == kPlayerOne) {
             state.apply_action(
-                choose_action(blue, state, blue_rng, blue_neural_evaluator, action_selection));
+                choose_action(
+                    blue,
+                    state,
+                    blue_rng,
+                    blue_neural_evaluator,
+                    blue_action_selection));
         } else {
             state.apply_action(
-                choose_action(white, state, white_rng, white_neural_evaluator, action_selection));
+                choose_action(
+                    white,
+                    state,
+                    white_rng,
+                    white_neural_evaluator,
+                    white_action_selection));
         }
         ++internal_actions;
     }
@@ -415,7 +441,7 @@ std::vector<GameRecord> run_arena(
     int threads,
     int neural_batch_size,
     double neural_batch_wait_ms,
-    ActionSelection action_selection) {
+    ActionSelectionByAgent action_selection) {
     int worker_count = effective_thread_count(pairs, threads);
     std::vector<GameRecord> records(static_cast<std::size_t>(pairs) * 2);
     ArenaNeuralEvaluators neural_evaluators = make_neural_evaluators(
@@ -446,7 +472,8 @@ std::vector<GameRecord> run_arena(
                         pair_index,
                         first_record,
                         max_actions,
-                        action_selection);
+                        action_selection.agent_a,
+                        action_selection.agent_b);
                     records[first_record + 1] = play_game(
                         agent_b,
                         agent_a,
@@ -458,7 +485,8 @@ std::vector<GameRecord> run_arena(
                         pair_index,
                         first_record + 1,
                         max_actions,
-                        action_selection);
+                        action_selection.agent_b,
+                        action_selection.agent_a);
                 }
             } catch (...) {
                 std::lock_guard<std::mutex> lock(exception_mutex);
@@ -556,12 +584,13 @@ void print_text_report(
     int pairs,
     int threads,
     std::uint64_t seed,
-    ActionSelection action_selection,
+    ActionSelectionByAgent action_selection,
     const Summary& summary) {
     std::cout << "Arena: A=" << agent_a.label << " vs B=" << agent_b.label << "\n";
     std::cout << "Pairs: " << pairs << "  Games: " << summary.games
               << "  Threads: " << threads << "  Seed: " << seed
-              << "  Action selection: " << action_selection_label(action_selection) << "\n";
+              << "  Action selection: A=" << action_selection_label(action_selection.agent_a)
+              << " B=" << action_selection_label(action_selection.agent_b) << "\n";
     std::cout << "Result: A wins " << summary.agent_a_wins
               << ", B wins " << summary.agent_b_wins
               << ", ties " << summary.ties << "\n";
@@ -605,7 +634,7 @@ void print_json_report(
     int pairs,
     int threads,
     std::uint64_t seed,
-    ActionSelection action_selection,
+    ActionSelectionByAgent action_selection,
     const Summary& summary,
     const std::vector<GameRecord>& records) {
     std::cout << "{";
@@ -616,8 +645,10 @@ void print_json_report(
     std::cout << ",\"pairs\":" << pairs;
     std::cout << ",\"threads\":" << threads;
     std::cout << ",\"seed\":" << seed;
-    std::cout << ",\"action_selection\":";
-    print_json_string(action_selection_label(action_selection));
+    std::cout << ",\"agent_a_action_selection\":";
+    print_json_string(action_selection_label(action_selection.agent_a));
+    std::cout << ",\"agent_b_action_selection\":";
+    print_json_string(action_selection_label(action_selection.agent_b));
     std::cout << ",\"summary\":{";
     std::cout << "\"games\":" << summary.games;
     std::cout << ",\"agent_a_wins\":" << summary.agent_a_wins;
@@ -708,9 +739,22 @@ int main(int argc, char** argv) {
             "threads",
             std::to_string(std::max(1u, std::thread::hardware_concurrency()))));
         int neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
-        double neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "2.0"));
-        ActionSelection action_selection = parse_action_selection(
-            arg_or_default(args, "action-selection", "max"));
+        double neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "0.5"));
+        if (args.find("action-selection") != args.end()) {
+            throw std::runtime_error(
+                "use --agent-a-action-selection and --agent-b-action-selection");
+        }
+        ActionSelectionByAgent action_selection = default_action_selection(agent_a, agent_b);
+        auto agent_a_action_selection_arg = args.find("agent-a-action-selection");
+        if (agent_a_action_selection_arg != args.end()) {
+            action_selection.agent_a =
+                parse_action_selection(agent_a_action_selection_arg->second);
+        }
+        auto agent_b_action_selection_arg = args.find("agent-b-action-selection");
+        if (agent_b_action_selection_arg != args.end()) {
+            action_selection.agent_b =
+                parse_action_selection(agent_b_action_selection_arg->second);
+        }
         bool json = args.find("json") != args.end();
 
         int worker_count = effective_thread_count(pairs, threads);

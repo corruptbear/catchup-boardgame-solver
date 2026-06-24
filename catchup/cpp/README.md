@@ -89,10 +89,13 @@ Arena options:
 --seed N         base random seed
 --threads N      worker threads; default is hardware thread count capped by pairs
 --max-actions N  abort a game after N internal actions
---action-selection max|sample
+--agent-a-action-selection max|sample
+--agent-b-action-selection max|sample
                  max chooses the highest-visit root child; sample samples by visits
+                 default is sample for both agents in neural-puct vs neural-puct,
+                 max for both agents otherwise
 --neural-batch-size N     fixed neural eval batch size; default 32
---neural-batch-wait-ms N  max wait to gather a neural batch; default 2.0
+--neural-batch-wait-ms N  max wait to gather a neural batch; default 0.5
 --json           print full JSON records instead of the text summary
 ```
 
@@ -142,7 +145,8 @@ Options:
 --teacher MODE            puct or neural-puct; default puct
 --model PATH              AOTInductor package for neural-puct teacher
 --neural-batch-size N     fixed neural eval batch size; default 32
---neural-batch-wait-ms N  max wait to gather a batch; default 2.0
+--neural-batch-wait-ms N  max wait to gather a batch; default 0.5
+--profile-neural-batch 1  print neural batch timing stats to stderr
 --root-noise-epsilon N    opening neural root noise weight; default 0.25
 --root-dirichlet-total-concentration N
                           total root Dirichlet concentration; default 10.0

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <optional>
@@ -33,9 +34,10 @@ struct Config {
     PuctConfig puct_config;
     std::string model_path;
     int neural_batch_size = 32;
-    double neural_batch_wait_ms = 2.0;
+    double neural_batch_wait_ms = 0.5;
     NeuralPuctConfig neural_puct_config;
     std::string output_path;
+    bool profile_neural_batch = false;
 };
 
 struct TerminalInfo {
@@ -125,7 +127,7 @@ Config parse_config(int argc, char** argv) {
     config.puct_config.rollout = parse_puct_rollout_mode(
         arg_or_default(args, "puct-rollout", "biased"));
     config.neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
-    config.neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "2.0"));
+    config.neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "0.5"));
     config.neural_puct_config.root_noise_epsilon = std::stod(
         arg_or_default(args, "root-noise-epsilon", "0.25"));
     config.neural_puct_config.root_dirichlet_total_concentration = std::stod(
@@ -136,6 +138,7 @@ Config parse_config(int argc, char** argv) {
         arg_or_default(args, "root-noise-action-power", "0.5"));
     config.neural_puct_config.root_noise_empty_power = std::stod(
         arg_or_default(args, "root-noise-empty-power", "1.0"));
+    config.profile_neural_batch = arg_or_default(args, "profile-neural-batch", "0") != "0";
 
     if (config.games <= 0) {
         throw std::runtime_error("games must be positive");
@@ -172,6 +175,72 @@ Config parse_config(int argc, char** argv) {
         throw std::runtime_error("root-noise-empty-power must be non-negative");
     }
     return config;
+}
+
+void print_neural_batch_stats(const NeuralBatchStats& stats, double wait_ms) {
+    auto milliseconds = [](std::uint64_t nanoseconds) {
+        return static_cast<double>(nanoseconds) / 1'000'000.0;
+    };
+    const double average_batch_size = stats.batches == 0
+        ? 0.0
+        : static_cast<double>(stats.batch_items) / static_cast<double>(stats.batches);
+    const double full_batch_rate = stats.batches == 0
+        ? 0.0
+        : static_cast<double>(stats.full_batches) / static_cast<double>(stats.batches);
+    const double deadline_rate = stats.fill_waits == 0
+        ? 0.0
+        : static_cast<double>(stats.deadline_batches) / static_cast<double>(stats.fill_waits);
+    const double average_fill_wait_ms = stats.fill_waits == 0
+        ? 0.0
+        : milliseconds(stats.fill_wait_ns) / static_cast<double>(stats.fill_waits);
+    const double average_model_ms = stats.batches == 0
+        ? 0.0
+        : milliseconds(stats.model_time_ns) / static_cast<double>(stats.batches);
+    const double average_feature_ms = stats.batches == 0
+        ? 0.0
+        : milliseconds(stats.feature_time_ns) / static_cast<double>(stats.batches);
+    const double average_input_ms = stats.batches == 0
+        ? 0.0
+        : milliseconds(stats.input_time_ns) / static_cast<double>(stats.batches);
+    const double average_aoti_ms = stats.batches == 0
+        ? 0.0
+        : milliseconds(stats.aoti_time_ns) / static_cast<double>(stats.batches);
+    const double average_output_ms = stats.batches == 0
+        ? 0.0
+        : milliseconds(stats.output_time_ns) / static_cast<double>(stats.batches);
+    const double average_postprocess_ms = stats.batches == 0
+        ? 0.0
+        : milliseconds(stats.postprocess_time_ns) / static_cast<double>(stats.batches);
+    const double average_request_latency_ms = stats.requests == 0
+        ? 0.0
+        : milliseconds(stats.request_latency_ns) / static_cast<double>(stats.requests);
+
+    std::cerr << std::fixed << std::setprecision(3)
+              << "neural_batch_profile "
+              << "wait_ms=" << wait_ms
+              << " requests=" << stats.requests
+              << " batches=" << stats.batches
+              << " avg_batch_size=" << average_batch_size
+              << " full_batch_rate=" << full_batch_rate
+              << " fill_waits=" << stats.fill_waits
+              << " deadline_batches=" << stats.deadline_batches
+              << " deadline_rate=" << deadline_rate
+              << " total_fill_wait_ms=" << milliseconds(stats.fill_wait_ns)
+              << " avg_fill_wait_ms=" << average_fill_wait_ms
+              << " total_model_ms=" << milliseconds(stats.model_time_ns)
+              << " avg_model_ms=" << average_model_ms
+              << " total_feature_ms=" << milliseconds(stats.feature_time_ns)
+              << " avg_feature_ms=" << average_feature_ms
+              << " total_input_ms=" << milliseconds(stats.input_time_ns)
+              << " avg_input_ms=" << average_input_ms
+              << " total_aoti_ms=" << milliseconds(stats.aoti_time_ns)
+              << " avg_aoti_ms=" << average_aoti_ms
+              << " total_output_ms=" << milliseconds(stats.output_time_ns)
+              << " avg_output_ms=" << average_output_ms
+              << " total_postprocess_ms=" << milliseconds(stats.postprocess_time_ns)
+              << " avg_postprocess_ms=" << average_postprocess_ms
+              << " avg_request_latency_ms=" << average_request_latency_ms
+              << "\n";
 }
 
 TerminalInfo terminal_info(const TrackedState& state) {
@@ -300,6 +369,11 @@ std::vector<std::vector<Sample>> generate_games(const Config& config) {
     }
     if (first_error.has_value()) {
         throw std::runtime_error(first_error.value());
+    }
+    if (config.profile_neural_batch && neural_evaluator) {
+        print_neural_batch_stats(
+            neural_evaluator->batch_stats(),
+            config.neural_batch_wait_ms);
     }
     return games;
 }

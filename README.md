@@ -94,10 +94,13 @@ Arena options:
 --seed N         base random seed
 --threads N      worker threads; default is hardware thread count capped by pairs
 --max-actions N  abort a game after N internal actions
---action-selection max|sample
+--agent-a-action-selection max|sample
+--agent-b-action-selection max|sample
                  max chooses the highest-visit root child; sample samples by visits
+                 default is sample for both agents in neural-puct vs neural-puct,
+                 max for both agents otherwise
 --neural-batch-size N     fixed neural eval batch size; default 32
---neural-batch-wait-ms N  max wait to gather a neural batch; default 2.0
+--neural-batch-wait-ms N  max wait to gather a neural batch; default 0.5
 --json           print full JSON records instead of the text summary
 ```
 

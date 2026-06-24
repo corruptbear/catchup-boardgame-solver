@@ -16,6 +16,23 @@ struct NeuralEvaluation {
     int player = kPlayerOne;
 };
 
+struct NeuralBatchStats {
+    std::uint64_t requests = 0;
+    std::uint64_t batches = 0;
+    std::uint64_t batch_items = 0;
+    std::uint64_t full_batches = 0;
+    std::uint64_t fill_waits = 0;
+    std::uint64_t deadline_batches = 0;
+    std::uint64_t fill_wait_ns = 0;
+    std::uint64_t model_time_ns = 0;
+    std::uint64_t feature_time_ns = 0;
+    std::uint64_t input_time_ns = 0;
+    std::uint64_t aoti_time_ns = 0;
+    std::uint64_t output_time_ns = 0;
+    std::uint64_t postprocess_time_ns = 0;
+    std::uint64_t request_latency_ns = 0;
+};
+
 struct NeuralPuctConfig {
     double root_noise_epsilon = 0.0;
     double root_dirichlet_total_concentration = 10.0;
@@ -57,6 +74,7 @@ public:
     BatchedNeuralEvaluator& operator=(const BatchedNeuralEvaluator&) = delete;
 
     NeuralEvaluation evaluate(const TrackedState& state);
+    NeuralBatchStats batch_stats() const;
 
 private:
     struct Impl;

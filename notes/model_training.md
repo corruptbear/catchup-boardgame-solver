@@ -512,7 +512,8 @@ real 79.63s
 
 same-model stochastic arena, visit-count sampling
 neural-puct:100 vs same model
-pairs 64, games 128, threads 64, action-selection sample, seed 1
+pairs 64, games 128, threads 64
+agent-a-action-selection sample, agent-b-action-selection sample, seed 1
 result A 51, B 77, ties 0
 A as Blue  26-38-0
 A as White 25-39-0
@@ -522,7 +523,8 @@ real 96.41s
 
 same-model stochastic arena, visit-count sampling
 neural-puct:100 vs same model
-pairs 64, games 128, threads 64, action-selection sample, seed 2
+pairs 64, games 128, threads 64
+agent-a-action-selection sample, agent-b-action-selection sample, seed 2
 result A 76, B 52, ties 0
 A as Blue  39-25-0
 A as White 37-27-0
@@ -743,7 +745,8 @@ For the no-player directional-CNN h64 package, batch 128 was faster than batch
 
 ```text
 neural-puct:100 vs neural-puct:100
-pairs 128, games 256, action-selection sample, seed 3
+pairs 128, games 256
+agent-a-action-selection sample, agent-b-action-selection sample, seed 3
 
 threads 64,  neural batch size 64:   real 180.77s, 0.706s/game
 threads 128, neural batch size 128:  real 154.05s, 0.602s/game
@@ -751,6 +754,46 @@ threads 128, neural batch size 128:  real 154.05s, 0.602s/game
 throughput speedup: 1.17x
 wall-time reduction: 14.8%
 ```
+
+Batch wait profiling on the no-player directional-CNN h64 package:
+
+```text
+model        data/models/directional_cnn_h64_noplayer_iter_0008_npuct400_replay_aoti_mps_b128.pt2
+games        128
+simulations  100
+threads      128
+batch size   128
+seed         123
+```
+
+```text
+wait_ms  real_s  avg_batch  full_batch  total_fill_wait_ms  avg_model_ms  avg_request_ms
+2.00      92.36    100.34      64.5%             5630.82        13.54          14.25
+1.00      88.99    100.32      64.0%             2910.05        13.47          13.86
+0.50      84.64    100.29      63.9%             1470.30        13.05          13.41
+0.25      85.61    100.21      62.1%              806.77        13.25          13.66
+0.00      90.47     91.59      55.4%                0.00        12.99          13.76
+```
+
+The old `2.0ms` wait spent measurable time waiting without improving batch
+size over `0.5ms`. No deliberate wait (`0.0ms`) made batches smaller and was
+slower. The current C++ default is therefore `--neural-batch-wait-ms 0.5`.
+
+Internal timing for the `0.5ms` run, with an explicit MPS synchronization after
+`loader.run()`:
+
+```text
+avg_model_ms        13.302
+avg_feature_ms       0.049
+avg_input_ms         0.667
+avg_aoti_ms         12.063
+avg_output_ms        0.488
+avg_postprocess_ms   0.027
+```
+
+`avg_aoti_ms` is the real bottleneck. Without the explicit MPS synchronization,
+this time appeared under output copy because copying tensors back to CPU forced
+the queued MPS work to finish.
 
 AOTInductor packages are exported for a fixed input batch size, so the package
 batch size must match the generator's `--neural-batch-size`. For a batch of 32:
@@ -808,7 +851,7 @@ wall time                392.97s
 The shard metadata records the model, batch size, and root-noise schedule in
 `meta.teacher`.
 
-No-player warm-up collection and first 200-simulation iteration:
+No-player warm-up collection and stronger-search iterations:
 
 ```text
 base model
@@ -817,6 +860,7 @@ data/models/directional_cnn_h64_noplayer_30shards_3sym_20ep_aoti_mps_b128.pt2
 self-play settings
 iter_0001 through iter_0005  neural-puct:100
 iter_0006                    neural-puct:200
+iter_0007 through iter_0009  neural-puct:400
 games per generation      640
 threads                   128
 neural batch size         128
@@ -835,6 +879,9 @@ iter_0003    100    32360        297         343      49.652    21.977
 iter_0004    100    32351        311         329      49.567    21.995
 iter_0005    100    32216        300         340      49.475    22.092
 iter_0006    200    33613        314         326      51.645    22.972
+iter_0007    400    33454        325         315      51.625    23.150
+iter_0008    400    33465        303         337      51.642    23.225
+iter_0009    400    33728        313         327      51.875    23.278
 ```
 
 Saved shard paths:
@@ -846,6 +893,9 @@ data/neural_self_play_noplayer/iter_0003_directional_h64_noplayer_npuct100_640g_
 data/neural_self_play_noplayer/iter_0004_directional_h64_noplayer_npuct100_640g_b128_root_noise_decay.jsonl
 data/neural_self_play_noplayer/iter_0005_directional_h64_noplayer_npuct100_640g_b128_root_noise_decay.jsonl
 data/neural_self_play_noplayer/iter_0006_directional_h64_noplayer_npuct200_640g_b128_root_noise_decay.jsonl
+data/neural_self_play_noplayer/iter_0007_directional_h64_noplayer_npuct400_640g_b128_root_noise_decay.jsonl
+data/neural_self_play_noplayer/iter_0008_directional_h64_noplayer_npuct400_640g_b128_root_noise_decay.jsonl
+data/neural_self_play_noplayer/iter_0009_directional_h64_noplayer_npuct400_640g_b128_root_noise_decay.jsonl
 ```
 
 Replay training results:
@@ -858,6 +908,9 @@ iter_0003              76              38912    6.330  2.8079      2.1334      0
 iter_0004             102              52224    8.933  2.7023      2.0867      0.6156
 iter_0005             126              64512   10.268  2.6565      2.0482      0.6082
 iter_0006             132              67584   11.649  2.6399      2.0061      0.6338
+iter_0007             131              67072   11.519  2.6948      1.9853      0.7095
+iter_0008             131              67072   11.818  2.6952      1.9392      0.7560
+iter_0009             132              67584   11.562  2.7173      1.9253      0.7920
 ```
 
 Final five-generation sample rates with `K = 5`, `gamma = 0.8`, and target
@@ -882,6 +935,39 @@ iter_0005  23.89%
 iter_0006  29.67%
 ```
 
+For `iter_0007`, the replay window rolled forward to `iter_0003` through
+`iter_0007`. Its sample rates were:
+
+```text
+iter_0003  12.21%
+iter_0004  15.18%
+iter_0005  19.03%
+iter_0006  23.62%
+iter_0007  29.95%
+```
+
+For `iter_0008`, the replay window rolled forward to `iter_0004` through
+`iter_0008`. Its sample rates were:
+
+```text
+iter_0004  12.32%
+iter_0005  15.30%
+iter_0006  18.87%
+iter_0007  23.72%
+iter_0008  29.80%
+```
+
+For `iter_0009`, the replay window rolled forward to `iter_0005` through
+`iter_0009`. Its sample rates were:
+
+```text
+iter_0005  12.29%
+iter_0006  15.37%
+iter_0007  19.13%
+iter_0008  23.65%
+iter_0009  29.56%
+```
+
 Saved replay checkpoints and batch-128 packages:
 
 ```text
@@ -897,6 +983,12 @@ data/models/directional_cnn_h64_noplayer_iter_0005_replay.pt
 data/models/directional_cnn_h64_noplayer_iter_0005_replay_aoti_mps_b128.pt2
 data/models/directional_cnn_h64_noplayer_iter_0006_npuct200_replay.pt
 data/models/directional_cnn_h64_noplayer_iter_0006_npuct200_replay_aoti_mps_b128.pt2
+data/models/directional_cnn_h64_noplayer_iter_0007_npuct400_replay.pt
+data/models/directional_cnn_h64_noplayer_iter_0007_npuct400_replay_aoti_mps_b128.pt2
+data/models/directional_cnn_h64_noplayer_iter_0008_npuct400_replay.pt
+data/models/directional_cnn_h64_noplayer_iter_0008_npuct400_replay_aoti_mps_b128.pt2
+data/models/directional_cnn_h64_noplayer_iter_0009_npuct400_replay.pt
+data/models/directional_cnn_h64_noplayer_iter_0009_npuct400_replay_aoti_mps_b128.pt2
 ```
 
 Arena check against the no-player bootstrap model:
@@ -928,6 +1020,81 @@ real 272.09s
 The deterministic max-visit check is color dominated, so it does not separate
 model strength in this matchup. The stochastic visit-count check strongly favors
 the five-generation replay model over the bootstrap model.
+
+Arena checks against heuristic `puct:10000:prior=heuristic:rollout=biased`:
+
+```text
+generation  search            seed  result  score rate  Blue result  White result
+iter_0006   neural-puct:200      1   10-30       25.0%       6-14          4-16
+iter_0007   neural-puct:400      1   20-20       50.0%       9-11         11-9
+iter_0008   neural-puct:400      1   15-25       37.5%       6-14          9-11
+iter_0008   neural-puct:400      2   14-26       35.0%       7-13          7-13
+iter_0009   neural-puct:400      1   12-28       30.0%       5-15          7-13
+```
+
+These 40-game checks suggest the post-`iter_0007` regression is real enough to
+investigate before continuing the same loop.
+
+100-simulation continuation branch from `iter_0005`:
+
+```text
+data directory  data/neural_self_play_noplayer_npuct100_cont/
+checkpoint tag  npuct100cont
+iter_0006 through iter_0009 all use neural-puct:100 for self-play generation.
+```
+
+Generated shards:
+
+```text
+generation  sims  samples  Blue wins  White wins  avg filled  avg turns
+iter_0006    100    32656        317         323      50.078    22.269
+iter_0007    100    32343        335         305      49.598    21.973
+iter_0008    100    32794        306         334      50.264    22.397
+iter_0009    100    32166        321         319      49.438    22.042
+```
+
+Replay training:
+
+```text
+generation  train batches  sampled positions  seconds  loss    policy loss  value loss
+iter_0006             128              65536   10.685  2.6323      2.0087      0.6236
+iter_0007             127              65024   10.458  2.6001      1.9809      0.6192
+iter_0008             129              66048   10.206  2.5470      1.9397      0.6074
+iter_0009             126              64512   11.156  2.5263      1.9319      0.5944
+```
+
+Arena checks against heuristic `puct:10000:prior=heuristic:rollout=biased`:
+
+```text
+generation  search            seed  result  score rate  Blue result  White result
+iter_0006   neural-puct:100      1    9-31       22.5%       4-16          5-15
+iter_0007   neural-puct:100      1   11-29       27.5%       4-16          7-13
+iter_0008   neural-puct:100      1   16-24       40.0%       8-12          8-12
+iter_0009   neural-puct:100      1    9-31       22.5%       4-16          5-15
+```
+
+The 100-simulation branch did not show the same monotonic decline as the
+400-simulation branch, and its replay value loss improved instead of worsening.
+It also did not clearly beat the best 400-simulation checkpoint in arena.
+
+Direct neural-vs-neural arena checks must use visit-count sampling. Deterministic
+max-visit action selection can collapse into repeated lines and is not model
+strength evidence for these neural checkpoints. `catchup_arena` now defaults to
+visit-count sampling for both agents when both agents are `neural-puct`.
+
+```text
+A = data/models/directional_cnn_h64_noplayer_iter_0007_npuct100cont_replay_aoti_mps_b128.pt2
+B = data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_aoti_mps_b128.pt2
+both search = neural-puct:100
+pairs 64, games 128, threads 64, batch size 128, seed 1
+agent-a-action-selection sample
+agent-b-action-selection sample
+A wins 46, B wins 82, ties 0
+A score rate 35.9% (95% CI 27.6%..44.2%)
+A as Blue  27-37-0
+A as White 19-45-0
+real 280.26s
+```
 
 Arena checks against `mcts:10000`:
 
@@ -1025,6 +1192,13 @@ iter_0003              76              38912    [26.19, 32.70, 41.11]
 iter_0004             102              52224    [17.49, 21.59, 27.05, 33.88]
 iter_0005             126              64512    [12.12, 15.44, 18.94, 23.67, 29.83]
 iter_0006             132              67584    [12.26, 15.30, 18.88, 23.89, 29.67]
+iter_0007             131              67072    [12.21, 15.18, 19.03, 23.62, 29.95]
+iter_0008             131              67072    [12.32, 15.30, 18.87, 23.72, 29.80]
+iter_0009             132              67584    [12.29, 15.37, 19.13, 23.65, 29.56]
+100-cont iter_0006   128              65536    [12.28, 15.21, 18.83, 23.58, 30.10]
+100-cont iter_0007   127              65024    [12.26, 15.32, 18.92, 23.55, 29.95]
+100-cont iter_0008   129              66048    [12.27, 15.48, 18.88, 23.84, 29.53]
+100-cont iter_0009   126              64512    [12.15, 15.26, 18.91, 23.79, 29.89]
 ```
 
 ## Known Gaps
