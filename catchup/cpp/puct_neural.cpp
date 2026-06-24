@@ -20,7 +20,7 @@
 namespace {
 
 constexpr int kCellFeatureCount = 4;
-constexpr int kFeatureCount = kCellCount * kCellFeatureCount + kMaxActions + 5;
+constexpr int kFeatureCount = kCellCount * kCellFeatureCount + kMaxActions + 4;
 constexpr int kLegalMaskOffset = kCellCount * kCellFeatureCount;
 constexpr int kScalarOffset = kLegalMaskOffset + kMaxActions;
 std::mutex loader_mutex;
@@ -50,12 +50,11 @@ void write_state_features(const TrackedState& state, float* features) {
         features[kLegalMaskOffset + legal_actions[index]] = 1.0F;
     }
 
-    features[kScalarOffset] = static_cast<float>(state.current_player);
-    features[kScalarOffset + 1] = static_cast<float>(state.selected.size()) / 3.0F;
-    features[kScalarOffset + 2] = static_cast<float>(state.max_claims) / 3.0F;
-    features[kScalarOffset + 3] =
+    features[kScalarOffset] = static_cast<float>(state.selected.size()) / 3.0F;
+    features[kScalarOffset + 1] = static_cast<float>(state.max_claims) / 3.0F;
+    features[kScalarOffset + 2] =
         static_cast<float>(state.turn_start_largest) / static_cast<float>(kCellCount);
-    features[kScalarOffset + 4] = state.opening_turn ? 1.0F : 0.0F;
+    features[kScalarOffset + 3] = state.opening_turn ? 1.0F : 0.0F;
 }
 
 std::vector<NeuralEvaluation> run_model_batch(
@@ -280,10 +279,12 @@ NeuralEvaluation BatchedNeuralEvaluator::evaluate(const TrackedState& state) {
 NeuralPuctMcts::NeuralPuctMcts(
     int simulation_count,
     std::uint64_t seed,
-    NeuralEvaluatorBase& evaluator)
+    NeuralEvaluatorBase& evaluator,
+    NeuralPuctConfig config)
     : simulations_(simulation_count),
       rng_(seed),
-      evaluator_(evaluator) {
+      evaluator_(evaluator),
+      config_(config) {
     if (simulations_ <= 0) {
         throw std::runtime_error("simulations must be positive");
     }
@@ -298,6 +299,7 @@ PuctNode* NeuralPuctMcts::search(const TrackedState& root_state) {
     nodes_.push_back(std::make_unique<PuctNode>(root_state));
     PuctNode* root = nodes_.back().get();
     initialize_edges(root, evaluator_.evaluate(root->state).priors);
+    add_root_dirichlet_noise(root);
 
     for (int simulation = 0; simulation < simulations_; ++simulation) {
         LeafEvaluation evaluation = select_and_evaluate(root);
@@ -387,6 +389,40 @@ void NeuralPuctMcts::initialize_edges(
             nullptr,
             priors[action],
         });
+    }
+}
+
+void NeuralPuctMcts::add_root_dirichlet_noise(PuctNode* root) {
+    if (config_.root_noise_epsilon <= 0.0) {
+        return;
+    }
+
+    const double legal_count = static_cast<double>(root->action_edges.size());
+    const double per_action_alpha = config_.root_dirichlet_total_concentration / legal_count;
+    const double action_ratio = legal_count / config_.root_noise_reference_actions;
+    const double empty_ratio =
+        static_cast<double>(root->state.empty_count()) / static_cast<double>(kCellCount);
+    const double effective_epsilon =
+        config_.root_noise_epsilon
+        * std::pow(action_ratio, config_.root_noise_action_power)
+        * std::pow(empty_ratio, config_.root_noise_empty_power);
+
+    std::gamma_distribution<double> distribution(per_action_alpha, 1.0);
+    std::vector<double> noise;
+    noise.reserve(root->action_edges.size());
+
+    double total = 0.0;
+    for (std::size_t index = 0; index < root->action_edges.size(); ++index) {
+        double value = distribution(rng_);
+        noise.push_back(value);
+        total += value;
+    }
+
+    const double model_weight = 1.0 - effective_epsilon;
+    for (std::size_t index = 0; index < root->action_edges.size(); ++index) {
+        root->action_edges[index].prior =
+            model_weight * root->action_edges[index].prior
+            + effective_epsilon * noise[index] / total;
     }
 }
 

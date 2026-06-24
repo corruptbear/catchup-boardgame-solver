@@ -89,6 +89,8 @@ Arena options:
 --seed N         base random seed
 --threads N      worker threads; default is hardware thread count capped by pairs
 --max-actions N  abort a game after N internal actions
+--action-selection max|sample
+                 max chooses the highest-visit root child; sample samples by visits
 --neural-batch-size N     fixed neural eval batch size; default 32
 --neural-batch-wait-ms N  max wait to gather a neural batch; default 2.0
 --json           print full JSON records instead of the text summary
@@ -141,6 +143,15 @@ Options:
 --model PATH              AOTInductor package for neural-puct teacher
 --neural-batch-size N     fixed neural eval batch size; default 32
 --neural-batch-wait-ms N  max wait to gather a batch; default 2.0
+--root-noise-epsilon N    opening neural root noise weight; default 0.25
+--root-dirichlet-total-concentration N
+                          total root Dirichlet concentration; default 10.0
+--root-noise-reference-actions N
+                          legal-action count where epsilon is unchanged; default 61
+--root-noise-action-power N
+                          epsilon scales by (legal/reference)^power; default 0.5
+--root-noise-empty-power N
+                          epsilon also scales by (empty_cells/61)^power; default 1.0
 --puct-prior MODE         flat or heuristic; default heuristic
 --puct-rollout M          flat or biased; default biased
 --max-actions N           abort a game after N internal actions
@@ -148,7 +159,15 @@ Options:
 ```
 
 For neural self-play, export a fixed-batch AOTInductor package and use the same
-batch size in the generator:
+batch size in the generator. Neural self-play mixes Dirichlet noise into the
+root priors of each search by default. The per-action Dirichlet alpha is
+`total_concentration / legal_action_count`. The effective noise weight is:
+
+```text
+epsilon
+* (legal_action_count / reference_actions) ^ action_power
+* (empty_cells / 61) ^ empty_power
+```
 
 ```sh
 python3.10 -m catchup.training.export_aoti --checkpoint data/models/gnn_policy_value_30shards_3sym_20ep.pt --exported-program data/models/gnn_policy_value_30shards_3sym_20ep_exported_b32.pt2 --package data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --device mps --batch-size 32

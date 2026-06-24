@@ -16,6 +16,14 @@ struct NeuralEvaluation {
     int player = kPlayerOne;
 };
 
+struct NeuralPuctConfig {
+    double root_noise_epsilon = 0.0;
+    double root_dirichlet_total_concentration = 10.0;
+    double root_noise_reference_actions = kCellCount;
+    double root_noise_action_power = 0.5;
+    double root_noise_empty_power = 1.0;
+};
+
 class NeuralEvaluatorBase {
 public:
     virtual ~NeuralEvaluatorBase() = default;
@@ -57,7 +65,11 @@ private:
 
 class NeuralPuctMcts {
 public:
-    NeuralPuctMcts(int simulation_count, std::uint64_t seed, NeuralEvaluatorBase& evaluator);
+    NeuralPuctMcts(
+        int simulation_count,
+        std::uint64_t seed,
+        NeuralEvaluatorBase& evaluator,
+        NeuralPuctConfig config = {});
 
     PuctNode* search(const TrackedState& root_state);
 
@@ -72,6 +84,7 @@ private:
     PuctChild* select_child(PuctNode* node);
     PuctNode* materialize_child(PuctNode* node, PuctChild& edge);
     void initialize_edges(PuctNode* node, const std::array<double, kMaxActions>& priors);
+    void add_root_dirichlet_noise(PuctNode* root);
     static void backpropagate(
         const std::vector<PuctNode*>& path,
         double value,
@@ -81,5 +94,6 @@ private:
     int simulations_;
     std::mt19937_64 rng_;
     NeuralEvaluatorBase& evaluator_;
+    NeuralPuctConfig config_;
     std::vector<std::unique_ptr<PuctNode>> nodes_;
 };

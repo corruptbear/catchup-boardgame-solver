@@ -80,6 +80,23 @@ class NeuralPuctPlayerTest(unittest.TestCase):
         self.assertEqual(root_choices(root)[0]["action"], 0)
         self.assertEqual(root_choices(root)[0]["visits"], 1)
 
+    def test_backpropagation_does_not_flip_inside_one_multi_cell_turn(self) -> None:
+        state = GameState.new().apply_action(0)
+        player = NeuralPuctPlayer(
+            FixedEvaluator(preferred_action=1, value=1.0),
+            simulations=2,
+            rng=random.Random(5),
+        )
+
+        root = player.search(state)
+        child = root.children[1]
+
+        self.assertEqual(root.state.current_player, child.state.current_player)
+        self.assertEqual(root.visits, 2)
+        self.assertEqual(child.visits, 1)
+        self.assertAlmostEqual(root.total_value, 2.0)
+        self.assertAlmostEqual(child.total_value, 1.0)
+
     def test_rejects_terminal_state(self) -> None:
         state = GameState.new()
         while not state.is_terminal():

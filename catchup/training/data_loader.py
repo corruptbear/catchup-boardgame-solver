@@ -72,15 +72,14 @@ def iter_training_samples(
     symmetry_copies: int = 1,
     rng: random.Random | None = None,
 ) -> Iterator[Sample]:
-    """Yield training samples, optionally augmented by random board symmetry."""
+    """Yield raw samples, plus optional random symmetry views."""
 
     random_source = rng if rng is not None else random
     for sample in iter_jsonl(paths):
+        yield sample
         if augment_symmetry and can_augment_with_symmetry(sample):
             for _ in range(symmetry_copies):
                 yield transform_sample(sample, random_source.choice(SYMMETRIES))
-        else:
-            yield sample
 
 
 def all_symmetry_variants(sample: Sample) -> Iterator[Sample]:

@@ -131,9 +131,9 @@ class TrainingDataLoaderTest(unittest.TestCase):
                 rng=FixedRng(symmetry),
             ))
 
-        self.assertEqual(loaded, [transform_sample(sample, symmetry)])
+        self.assertEqual(loaded, [sample, transform_sample(sample, symmetry)])
 
-    def test_iter_training_samples_can_emit_three_augmented_views(self) -> None:
+    def test_iter_training_samples_keeps_raw_sample_and_adds_augmented_views(self) -> None:
         sample = sample_with_marker()
         symmetry = SYMMETRIES[1]
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -147,7 +147,7 @@ class TrainingDataLoaderTest(unittest.TestCase):
                 rng=FixedRng(symmetry),
             ))
 
-        self.assertEqual(loaded, [transform_sample(sample, symmetry)] * 3)
+        self.assertEqual(loaded, [sample] + [transform_sample(sample, symmetry)] * 3)
 
     def test_iter_jsonl_accepts_one_path_or_many_paths(self) -> None:
         first = sample_with_marker(5)

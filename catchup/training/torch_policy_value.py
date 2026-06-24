@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import math
 import random
 import time
 from dataclasses import dataclass
@@ -19,14 +20,20 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from ..board import BOARD
 from ..game import FINISH, PLAYER_ONE, PLAYER_TWO
-from .data_loader import iter_training_samples
+from ..symmetry import SYMMETRIES
+from .data_loader import (
+    can_augment_with_symmetry,
+    iter_jsonl,
+    iter_training_samples,
+    transform_sample,
+)
 
 
 CELL_COUNT = FINISH
 ACTION_COUNT = FINISH + 1
-FEATURE_COUNT = CELL_COUNT * 4 + ACTION_COUNT + 5
+FEATURE_COUNT = CELL_COUNT * 4 + ACTION_COUNT + 4
 CELL_FEATURE_COUNT = 4
-GLOBAL_FEATURE_COUNT = 5
+GLOBAL_FEATURE_COUNT = 4
 LEGAL_MASK_OFFSET = CELL_COUNT * CELL_FEATURE_COUNT
 SCALAR_OFFSET = LEGAL_MASK_OFFSET + ACTION_COUNT
 MLP_ARCHITECTURE = "mlp"
@@ -39,8 +46,12 @@ GRID_CELL_COUNT = GRID_WIDTH * GRID_WIDTH
 @dataclass(frozen=True)
 class TrainConfig:
     data_glob: str = "data/bootstrap/shard_*_50g_10k.jsonl"
+    replay_data_glob: str | None = None
+    validation_data_glob: str | None = None
+    init_checkpoint: Path | None = None
     validation_shards: int = 3
     epochs: int = 3
+    train_batches: int | None = None
     batch_size: int = 1024
     hidden_size: int = 128
     architecture: str = MLP_ARCHITECTURE
@@ -51,8 +62,17 @@ class TrainConfig:
     symmetry_copies: int = 3
     seed: int = 1
     device: str = "auto"
+    replay_window_generations: int = 5
+    replay_gamma: float = 0.8
+    target_lifetime_coverage: float = 2.0
     out: Path = Path("data/models/small_policy_value.pt")
     metrics_out: Path = Path("data/models/small_policy_value_metrics.json")
+
+
+@dataclass(frozen=True)
+class ReplayGeneration:
+    path: Path
+    samples: tuple[dict[str, Any], ...]
 
 
 class PolicyValueNet(nn.Module):
@@ -361,7 +381,6 @@ def sample_to_arrays(sample: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, np
     cursor += ACTION_COUNT
     features[cursor:] = np.asarray(
         [
-            current_player,
             state["claimed_this_turn"] / 3.0,
             state["max_claims"] / 3.0,
             state["turn_start_largest"] / CELL_COUNT,
@@ -401,6 +420,70 @@ def materialize_dataset(
         torch.from_numpy(np.stack(features)),
         torch.from_numpy(np.stack(policies)),
         torch.from_numpy(np.asarray(values, dtype=np.float32)),
+    )
+
+
+def load_replay_generations(paths: Iterable[Path]) -> list[ReplayGeneration]:
+    generations: list[ReplayGeneration] = []
+    for path in paths:
+        generations.append(ReplayGeneration(path, tuple(iter_jsonl(path))))
+    return generations
+
+
+def replay_age_weights(generation_count: int, gamma: float) -> list[float]:
+    """Return oldest-to-newest truncated geometric weights."""
+
+    return [
+        gamma ** (generation_count - 1 - generation_index)
+        for generation_index in range(generation_count)
+    ]
+
+
+def replay_train_batches(config: TrainConfig, generations: list[ReplayGeneration]) -> int:
+    if config.train_batches is not None:
+        return config.train_batches
+
+    newest_size = len(generations[-1].samples)
+    warmup_fraction = min(1.0, len(generations) / config.replay_window_generations)
+    sampled_positions = (
+        config.target_lifetime_coverage
+        * newest_size
+        * warmup_fraction
+    )
+    return max(1, math.ceil(sampled_positions / config.batch_size))
+
+
+def sample_replay_batch(
+    generations: list[ReplayGeneration],
+    weights: list[float],
+    *,
+    batch_size: int,
+    rng: random.Random,
+    augment_symmetry: bool,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[int]]:
+    features: list[np.ndarray] = []
+    policies: list[np.ndarray] = []
+    values: list[np.float32] = []
+    generation_counts = [0] * len(generations)
+
+    generation_indexes = range(len(generations))
+    for _ in range(batch_size):
+        generation_index = rng.choices(generation_indexes, weights=weights, k=1)[0]
+        generation = generations[generation_index]
+        sample = rng.choice(generation.samples)
+        if augment_symmetry and can_augment_with_symmetry(sample):
+            sample = transform_sample(sample, rng.choice(SYMMETRIES))
+        feature, policy, value = sample_to_arrays(sample)
+        features.append(feature)
+        policies.append(policy)
+        values.append(value)
+        generation_counts[generation_index] += 1
+
+    return (
+        torch.from_numpy(np.stack(features)),
+        torch.from_numpy(np.stack(policies)),
+        torch.from_numpy(np.asarray(values, dtype=np.float32)),
+        generation_counts,
     )
 
 
@@ -461,6 +544,9 @@ def evaluate(
 
 
 def train(config: TrainConfig) -> dict[str, Any]:
+    if config.replay_data_glob is not None:
+        return train_replay(config)
+
     set_seeds(config.seed)
     paths = [Path(path) for path in sorted(glob.glob(config.data_glob))]
     if len(paths) <= config.validation_shards:
@@ -489,6 +575,7 @@ def train(config: TrainConfig) -> dict[str, Any]:
         gnn_layers=config.gnn_layers,
         cnn_layers=config.cnn_layers,
     ).to(device)
+    load_initial_checkpoint(model, config.init_checkpoint)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     history: list[dict[str, Any]] = []
 
@@ -557,6 +644,142 @@ def train(config: TrainConfig) -> dict[str, Any]:
     }
 
 
+def train_replay(config: TrainConfig) -> dict[str, Any]:
+    set_seeds(config.seed)
+    if (
+        config.init_checkpoint is not None
+        and config.out.resolve() == config.init_checkpoint.resolve()
+    ):
+        raise ValueError("replay training output must not overwrite the init checkpoint")
+
+    all_paths = [Path(path) for path in sorted(glob.glob(config.replay_data_glob or ""))]
+    if not all_paths:
+        raise ValueError("replay data glob matched no files")
+    replay_paths = all_paths[-config.replay_window_generations:]
+    generations = load_replay_generations(replay_paths)
+    weights = replay_age_weights(len(generations), config.replay_gamma)
+    train_batches = replay_train_batches(config, generations)
+    device = resolve_device(config.device)
+    rng = random.Random(config.seed)
+
+    validation_paths = (
+        [Path(path) for path in sorted(glob.glob(config.validation_data_glob))]
+        if config.validation_data_glob is not None
+        else []
+    )
+    validation_dataset = (
+        materialize_dataset(
+            validation_paths,
+            augment_symmetry=False,
+            symmetry_copies=1,
+            rng=rng,
+        )
+        if validation_paths
+        else None
+    )
+
+    model = build_model(
+        config.architecture,
+        hidden_size=config.hidden_size,
+        gnn_layers=config.gnn_layers,
+        cnn_layers=config.cnn_layers,
+    ).to(device)
+    load_initial_checkpoint(model, config.init_checkpoint)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
+
+    generation_counts = [0] * len(generations)
+    totals = {
+        "loss": 0.0,
+        "policy_loss": 0.0,
+        "value_loss": 0.0,
+    }
+    sampled_positions = train_batches * config.batch_size
+    started = time.time()
+
+    print(json.dumps({
+        "device": str(device),
+        "mode": "replay",
+        "replay_generations": len(generations),
+        "replay_paths": [str(generation.path) for generation in generations],
+        "replay_generation_sizes": [len(generation.samples) for generation in generations],
+        "replay_age_weights": weights,
+        "train_batches": train_batches,
+        "sampled_positions": sampled_positions,
+    }, sort_keys=True), flush=True)
+
+    model.train()
+    for _ in range(train_batches):
+        features, policy_target, value_target, batch_counts = sample_replay_batch(
+            generations,
+            weights,
+            batch_size=config.batch_size,
+            rng=rng,
+            augment_symmetry=True,
+        )
+        features = features.to(device)
+        policy_target = policy_target.to(device)
+        value_target = value_target.to(device)
+        optimizer.zero_grad(set_to_none=True)
+        policy_logits, value = model(features)
+        loss, policy_loss, value_loss = policy_value_loss(
+            policy_logits,
+            value,
+            policy_target,
+            value_target,
+            config.value_weight,
+        )
+        loss.backward()
+        optimizer.step()
+
+        totals["loss"] += float(loss.item()) * config.batch_size
+        totals["policy_loss"] += float(policy_loss.item()) * config.batch_size
+        totals["value_loss"] += float(value_loss.item()) * config.batch_size
+        for index, count in enumerate(batch_counts):
+            generation_counts[index] += count
+
+    record: dict[str, Any] = {
+        "seconds": round(time.time() - started, 3),
+        "train_batches": train_batches,
+        "sampled_positions": sampled_positions,
+        "generation_sample_counts": generation_counts,
+        "generation_sample_rates": [
+            count / sampled_positions
+            for count in generation_counts
+        ],
+        "train": {
+            name: total / sampled_positions
+            for name, total in totals.items()
+        },
+    }
+    if validation_dataset is not None:
+        record["validation_samples"] = len(validation_dataset)
+        record["validation"] = evaluate(
+            model,
+            validation_dataset,
+            batch_size=config.batch_size,
+            device=device,
+            value_weight=config.value_weight,
+        )
+    print(json.dumps(record, sort_keys=True), flush=True)
+
+    history = [record]
+    save_checkpoint(
+        model,
+        config,
+        replay_paths,
+        validation_paths,
+        history,
+        device,
+    )
+    return {
+        "config": config,
+        "train_paths": replay_paths,
+        "validation_paths": validation_paths,
+        "history": history,
+        "device": device,
+    }
+
+
 def resolve_device(device: str) -> torch.device:
     if device == "auto":
         if torch.backends.mps.is_available():
@@ -569,6 +792,13 @@ def set_seeds(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+
+
+def load_initial_checkpoint(model: nn.Module, checkpoint: Path | None) -> None:
+    if checkpoint is None:
+        return
+    payload = torch.load(checkpoint, map_location="cpu")
+    model.load_state_dict(normalize_model_state_dict(payload["model_state"]))
 
 
 def save_checkpoint(
@@ -590,13 +820,19 @@ def save_checkpoint(
         "action_count": ACTION_COUNT,
         "train_paths": [str(path) for path in train_paths],
         "validation_paths": [str(path) for path in validation_paths],
+        "init_checkpoint": str(config.init_checkpoint) if config.init_checkpoint is not None else None,
         "symmetry_copies": config.symmetry_copies,
         "epochs": config.epochs,
+        "train_batches": config.train_batches,
         "batch_size": config.batch_size,
         "learning_rate": config.learning_rate,
         "value_weight": config.value_weight,
         "seed": config.seed,
         "device": str(device),
+        "replay_data_glob": config.replay_data_glob,
+        "replay_window_generations": config.replay_window_generations,
+        "replay_gamma": config.replay_gamma,
+        "target_lifetime_coverage": config.target_lifetime_coverage,
     }
     torch.save(
         {
@@ -615,8 +851,12 @@ def save_checkpoint(
 def parse_args(argv: list[str] | None = None) -> TrainConfig:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-glob", default=TrainConfig.data_glob)
+    parser.add_argument("--replay-data-glob", default=TrainConfig.replay_data_glob)
+    parser.add_argument("--validation-data-glob", default=TrainConfig.validation_data_glob)
+    parser.add_argument("--init-checkpoint", type=Path, default=TrainConfig.init_checkpoint)
     parser.add_argument("--validation-shards", type=int, default=TrainConfig.validation_shards)
     parser.add_argument("--epochs", type=int, default=TrainConfig.epochs)
+    parser.add_argument("--train-batches", type=int, default=TrainConfig.train_batches)
     parser.add_argument("--batch-size", type=int, default=TrainConfig.batch_size)
     parser.add_argument("--hidden-size", type=int, default=TrainConfig.hidden_size)
     parser.add_argument(
@@ -635,13 +875,24 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
     parser.add_argument("--symmetry-copies", type=int, default=TrainConfig.symmetry_copies)
     parser.add_argument("--seed", type=int, default=TrainConfig.seed)
     parser.add_argument("--device", choices=("auto", "mps", "cpu"), default=TrainConfig.device)
+    parser.add_argument("--replay-window-generations", type=int, default=TrainConfig.replay_window_generations)
+    parser.add_argument("--replay-gamma", type=float, default=TrainConfig.replay_gamma)
+    parser.add_argument(
+        "--target-lifetime-coverage",
+        type=float,
+        default=TrainConfig.target_lifetime_coverage,
+    )
     parser.add_argument("--out", type=Path, default=TrainConfig.out)
     parser.add_argument("--metrics-out", type=Path, default=TrainConfig.metrics_out)
     args = parser.parse_args(argv)
     return TrainConfig(
         data_glob=args.data_glob,
+        replay_data_glob=args.replay_data_glob,
+        validation_data_glob=args.validation_data_glob,
+        init_checkpoint=args.init_checkpoint,
         validation_shards=args.validation_shards,
         epochs=args.epochs,
+        train_batches=args.train_batches,
         batch_size=args.batch_size,
         hidden_size=args.hidden_size,
         architecture=args.architecture,
@@ -652,6 +903,9 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
         symmetry_copies=args.symmetry_copies,
         seed=args.seed,
         device=args.device,
+        replay_window_generations=args.replay_window_generations,
+        replay_gamma=args.replay_gamma,
+        target_lifetime_coverage=args.target_lifetime_coverage,
         out=args.out,
         metrics_out=args.metrics_out,
     )

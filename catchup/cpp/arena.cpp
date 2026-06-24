@@ -28,6 +28,11 @@ enum class Engine {
     NeuralPuct,
 };
 
+enum class ActionSelection {
+    MaxVisits,
+    SampleVisits,
+};
+
 struct AgentSpec {
     Engine engine = Engine::Mcts;
     int simulations = 1000;
@@ -67,6 +72,14 @@ struct Summary {
     int a_white_wins = 0;
     int a_white_losses = 0;
     int a_white_ties = 0;
+    int b_blue_games = 0;
+    int b_blue_wins = 0;
+    int b_blue_losses = 0;
+    int b_blue_ties = 0;
+    int b_white_games = 0;
+    int b_white_wins = 0;
+    int b_white_losses = 0;
+    int b_white_ties = 0;
     double average_completed_turns = 0.0;
     double average_internal_actions = 0.0;
     double average_filled_cells = 0.0;
@@ -179,6 +192,20 @@ AgentSpec parse_agent_spec(const std::string& text) {
     return spec;
 }
 
+ActionSelection parse_action_selection(const std::string& text) {
+    if (text == "max") {
+        return ActionSelection::MaxVisits;
+    }
+    if (text == "sample") {
+        return ActionSelection::SampleVisits;
+    }
+    throw std::runtime_error("action-selection must be max or sample");
+}
+
+std::string action_selection_label(ActionSelection action_selection) {
+    return action_selection == ActionSelection::SampleVisits ? "sample" : "max";
+}
+
 int effective_thread_count(int pairs, int threads) {
     if (pairs <= 0) {
         throw std::runtime_error("pairs must be positive");
@@ -230,23 +257,70 @@ int best_action(const PuctNode* root) {
     return best;
 }
 
+int sample_action(const Node* root, std::mt19937_64& rng) {
+    std::vector<int> actions;
+    std::vector<int> weights;
+    actions.reserve(root->children.size());
+    weights.reserve(root->children.size());
+    for (const auto& child_entry : root->children) {
+        int visits = child_entry.second->visits;
+        if (visits > 0) {
+            actions.push_back(static_cast<int>(child_entry.first));
+            weights.push_back(visits);
+        }
+    }
+    if (actions.empty()) {
+        return best_action(root);
+    }
+    std::discrete_distribution<std::size_t> distribution(weights.begin(), weights.end());
+    return actions[distribution(rng)];
+}
+
+int sample_action(const PuctNode* root, std::mt19937_64& rng) {
+    std::vector<int> actions;
+    std::vector<int> weights;
+    actions.reserve(root->children.size());
+    weights.reserve(root->children.size());
+    for (const auto& edge : root->children) {
+        if (edge.child != nullptr && edge.child->visits > 0) {
+            actions.push_back(edge.action);
+            weights.push_back(edge.child->visits);
+        }
+    }
+    if (actions.empty()) {
+        return best_action(root);
+    }
+    std::discrete_distribution<std::size_t> distribution(weights.begin(), weights.end());
+    return actions[distribution(rng)];
+}
+
 int choose_action(
     const AgentSpec& spec,
     const TrackedState& state,
     std::mt19937_64& rng,
-    NeuralEvaluatorBase* neural_evaluator) {
+    NeuralEvaluatorBase* neural_evaluator,
+    ActionSelection action_selection) {
     if (spec.engine == Engine::Mcts) {
         Mcts search(spec.simulations, rng());
-        return best_action(search.search(state));
+        const Node* root = search.search(state);
+        return action_selection == ActionSelection::SampleVisits
+            ? sample_action(root, rng)
+            : best_action(root);
     }
 
     if (spec.engine == Engine::Puct) {
         PuctMcts search(spec.simulations, rng(), spec.puct_config);
-        return best_action(search.search(state));
+        const PuctNode* root = search.search(state);
+        return action_selection == ActionSelection::SampleVisits
+            ? sample_action(root, rng)
+            : best_action(root);
     }
 
     NeuralPuctMcts search(spec.simulations, rng(), *neural_evaluator);
-    return best_action(search.search(state));
+    const PuctNode* root = search.search(state);
+    return action_selection == ActionSelection::SampleVisits
+        ? sample_action(root, rng)
+        : best_action(root);
 }
 
 GameRecord play_game(
@@ -259,7 +333,8 @@ GameRecord play_game(
     std::uint64_t seed,
     int pair_index,
     int game_index,
-    int max_actions) {
+    int max_actions,
+    ActionSelection action_selection) {
     TrackedState state;
     std::mt19937_64 blue_rng(seed * 2 + 1);
     std::mt19937_64 white_rng(seed * 2 + 2);
@@ -271,10 +346,10 @@ GameRecord play_game(
         }
         if (state.current_player == kPlayerOne) {
             state.apply_action(
-                choose_action(blue, state, blue_rng, blue_neural_evaluator));
+                choose_action(blue, state, blue_rng, blue_neural_evaluator, action_selection));
         } else {
             state.apply_action(
-                choose_action(white, state, white_rng, white_neural_evaluator));
+                choose_action(white, state, white_rng, white_neural_evaluator, action_selection));
         }
         ++internal_actions;
     }
@@ -339,7 +414,8 @@ std::vector<GameRecord> run_arena(
     int max_actions,
     int threads,
     int neural_batch_size,
-    double neural_batch_wait_ms) {
+    double neural_batch_wait_ms,
+    ActionSelection action_selection) {
     int worker_count = effective_thread_count(pairs, threads);
     std::vector<GameRecord> records(static_cast<std::size_t>(pairs) * 2);
     ArenaNeuralEvaluators neural_evaluators = make_neural_evaluators(
@@ -369,7 +445,8 @@ std::vector<GameRecord> run_arena(
                         first_seed,
                         pair_index,
                         first_record,
-                        max_actions);
+                        max_actions,
+                        action_selection);
                     records[first_record + 1] = play_game(
                         agent_b,
                         agent_a,
@@ -380,7 +457,8 @@ std::vector<GameRecord> run_arena(
                         first_seed + 1,
                         pair_index,
                         first_record + 1,
-                        max_actions);
+                        max_actions,
+                        action_selection);
                 }
             } catch (...) {
                 std::lock_guard<std::mutex> lock(exception_mutex);
@@ -410,16 +488,35 @@ void add_color_result(const GameRecord& record, Summary& summary) {
         } else {
             ++summary.a_blue_ties;
         }
-        return;
+    } else {
+        ++summary.a_white_games;
+        if (record.winner_side == "A") {
+            ++summary.a_white_wins;
+        } else if (record.winner_side == "B") {
+            ++summary.a_white_losses;
+        } else {
+            ++summary.a_white_ties;
+        }
     }
 
-    ++summary.a_white_games;
-    if (record.winner_side == "A") {
-        ++summary.a_white_wins;
-    } else if (record.winner_side == "B") {
-        ++summary.a_white_losses;
+    if (record.blue_side == "B") {
+        ++summary.b_blue_games;
+        if (record.winner_side == "B") {
+            ++summary.b_blue_wins;
+        } else if (record.winner_side == "A") {
+            ++summary.b_blue_losses;
+        } else {
+            ++summary.b_blue_ties;
+        }
     } else {
-        ++summary.a_white_ties;
+        ++summary.b_white_games;
+        if (record.winner_side == "B") {
+            ++summary.b_white_wins;
+        } else if (record.winner_side == "A") {
+            ++summary.b_white_losses;
+        } else {
+            ++summary.b_white_ties;
+        }
     }
 }
 
@@ -459,10 +556,12 @@ void print_text_report(
     int pairs,
     int threads,
     std::uint64_t seed,
+    ActionSelection action_selection,
     const Summary& summary) {
     std::cout << "Arena: A=" << agent_a.label << " vs B=" << agent_b.label << "\n";
     std::cout << "Pairs: " << pairs << "  Games: " << summary.games
-              << "  Threads: " << threads << "  Seed: " << seed << "\n";
+              << "  Threads: " << threads << "  Seed: " << seed
+              << "  Action selection: " << action_selection_label(action_selection) << "\n";
     std::cout << "Result: A wins " << summary.agent_a_wins
               << ", B wins " << summary.agent_b_wins
               << ", ties " << summary.ties << "\n";
@@ -477,6 +576,12 @@ void print_text_report(
     std::cout << "A as White: " << summary.a_white_wins << "-"
               << summary.a_white_losses << "-" << summary.a_white_ties
               << " in " << summary.a_white_games << " games\n";
+    std::cout << "B as Blue: " << summary.b_blue_wins << "-"
+              << summary.b_blue_losses << "-" << summary.b_blue_ties
+              << " in " << summary.b_blue_games << " games\n";
+    std::cout << "B as White: " << summary.b_white_wins << "-"
+              << summary.b_white_losses << "-" << summary.b_white_ties
+              << " in " << summary.b_white_games << " games\n";
     std::cout << "Averages: " << summary.average_completed_turns << " turns, "
               << summary.average_internal_actions << " internal actions, "
               << summary.average_filled_cells << " filled cells\n";
@@ -500,6 +605,7 @@ void print_json_report(
     int pairs,
     int threads,
     std::uint64_t seed,
+    ActionSelection action_selection,
     const Summary& summary,
     const std::vector<GameRecord>& records) {
     std::cout << "{";
@@ -510,6 +616,8 @@ void print_json_report(
     std::cout << ",\"pairs\":" << pairs;
     std::cout << ",\"threads\":" << threads;
     std::cout << ",\"seed\":" << seed;
+    std::cout << ",\"action_selection\":";
+    print_json_string(action_selection_label(action_selection));
     std::cout << ",\"summary\":{";
     std::cout << "\"games\":" << summary.games;
     std::cout << ",\"agent_a_wins\":" << summary.agent_a_wins;
@@ -527,6 +635,16 @@ void print_json_report(
     std::cout << ",\"wins\":" << summary.a_white_wins;
     std::cout << ",\"losses\":" << summary.a_white_losses;
     std::cout << ",\"ties\":" << summary.a_white_ties << "}";
+    std::cout << ",\"agent_b_as_blue\":{";
+    std::cout << "\"games\":" << summary.b_blue_games;
+    std::cout << ",\"wins\":" << summary.b_blue_wins;
+    std::cout << ",\"losses\":" << summary.b_blue_losses;
+    std::cout << ",\"ties\":" << summary.b_blue_ties << "}";
+    std::cout << ",\"agent_b_as_white\":{";
+    std::cout << "\"games\":" << summary.b_white_games;
+    std::cout << ",\"wins\":" << summary.b_white_wins;
+    std::cout << ",\"losses\":" << summary.b_white_losses;
+    std::cout << ",\"ties\":" << summary.b_white_ties << "}";
     std::cout << ",\"average_completed_turns\":" << summary.average_completed_turns;
     std::cout << ",\"average_internal_actions\":" << summary.average_internal_actions;
     std::cout << ",\"average_filled_cells\":" << summary.average_filled_cells;
@@ -591,6 +709,8 @@ int main(int argc, char** argv) {
             std::to_string(std::max(1u, std::thread::hardware_concurrency()))));
         int neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
         double neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "2.0"));
+        ActionSelection action_selection = parse_action_selection(
+            arg_or_default(args, "action-selection", "max"));
         bool json = args.find("json") != args.end();
 
         int worker_count = effective_thread_count(pairs, threads);
@@ -602,12 +722,21 @@ int main(int argc, char** argv) {
             max_actions,
             threads,
             neural_batch_size,
-            neural_batch_wait_ms);
+            neural_batch_wait_ms,
+            action_selection);
         Summary summary = summarize(records);
         if (json) {
-            print_json_report(agent_a, agent_b, pairs, worker_count, seed, summary, records);
+            print_json_report(
+                agent_a,
+                agent_b,
+                pairs,
+                worker_count,
+                seed,
+                action_selection,
+                summary,
+                records);
         } else {
-            print_text_report(agent_a, agent_b, pairs, worker_count, seed, summary);
+            print_text_report(agent_a, agent_b, pairs, worker_count, seed, action_selection, summary);
         }
         return 0;
     } catch (const std::exception& exc) {

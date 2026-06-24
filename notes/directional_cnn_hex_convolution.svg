@@ -1,193 +1,243 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="title desc">
+  <title id="title">Directional CNN over the Catchup hex board</title>
+  <desc id="desc">Code-aligned diagram showing the 9 by 9 axial storage mask, the six directional hex-neighbor gathers, and the HexDirectionalBlock update.</desc>
+
   <defs>
     <style>
-      .title { font: 700 30px Arial, sans-serif; fill: #102a43; }
-      .section { font: 700 22px Arial, sans-serif; fill: #102a43; }
-      .label { font: 600 16px Arial, sans-serif; fill: #153449; }
-      .small { font: 14px Arial, sans-serif; fill: #425466; }
-      .tiny { font: 12px Arial, sans-serif; fill: #425466; }
-      .panel { fill: #fbfdff; stroke: #bfd2e3; stroke-width: 2; rx: 12; }
-      .valid { fill: #dff7f2; stroke: #0c7f73; stroke-width: 1.4; }
-      .masked { fill: #eef2f6; stroke: #b6c2cf; stroke-width: 1.2; opacity: 0.78; }
-      .center { fill: #1748ff; stroke: #092aa8; stroke-width: 2; }
-      .neighbor { fill: #ffd878; stroke: #c17800; stroke-width: 1.7; }
-      .ghost { fill: #f4f6f8; stroke: #c5ced8; stroke-width: 1.2; stroke-dasharray: 4 3; }
-      .box { fill: #f7fbff; stroke: #2f80ed; stroke-width: 2; rx: 8; }
-      .box2 { fill: #fff8e6; stroke: #d28b00; stroke-width: 2; rx: 8; }
-      .box3 { fill: #f1fff7; stroke: #159957; stroke-width: 2; rx: 8; }
-      .arrow { stroke: #496579; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
-      .dirArrow { stroke: #8f5b00; stroke-width: 2.1; fill: none; marker-end: url(#arrowOrange); opacity: 0.9; }
-      .maskLabel { font: 12px Arial, sans-serif; fill: #6c7a89; }
-      .formula { font: 700 16px Arial, sans-serif; fill: #102a43; }
+      .bg { fill: #f7fafc; }
+      .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.6; }
+      .panel-soft { fill: #f8fbff; stroke: #cbd5e1; stroke-width: 1.4; }
+      .title { font: 700 31px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 15px Arial, sans-serif; fill: #475569; }
+      .section { font: 700 20px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 700 15px Arial, sans-serif; fill: #18324a; }
+      .body { font: 14px Arial, sans-serif; fill: #475569; }
+      .small { font: 12px Arial, sans-serif; fill: #64748b; }
+      .tiny { font: 11px Arial, sans-serif; fill: #64748b; }
+      .code { font: 13px Menlo, Consolas, monospace; fill: #1f2937; }
+      .code-strong { font: 700 13px Menlo, Consolas, monospace; fill: #0f172a; }
+      .target-code { font: 11px Menlo, Consolas, monospace; fill: #ffffff; }
+      .slot-base { fill: #e7edf3; stroke: #bcc9d6; stroke-width: 1; }
+      .slot-valid { fill: #d9f4ec; }
+      .slot-neighbor { fill: #ffe3a3; stroke: #b87500; stroke-width: 1.8; }
+      .slot-target { fill: #2463eb; stroke: #123aa6; stroke-width: 2; }
+      .slot-grid { stroke: #ffffff; stroke-width: 1.4; }
+      .axis { font: 11px Menlo, Consolas, monospace; fill: #64748b; }
+      .hex-valid { fill: #e8fff5; stroke: #118a68; stroke-width: 2; }
+      .hex-target { fill: #2563eb; stroke: #123aa6; stroke-width: 2.4; }
+      .hex-neighbor { fill: #ffd166; stroke: #a46100; stroke-width: 2; }
+      .hex-muted { fill: #f1f5f9; stroke: #cbd5e1; stroke-width: 1.4; }
+      .box-blue { fill: #eff6ff; stroke: #2563eb; stroke-width: 1.8; }
+      .box-amber { fill: #fff7e6; stroke: #d97706; stroke-width: 1.8; }
+      .box-green { fill: #effdf6; stroke: #059669; stroke-width: 1.8; }
+      .box-red { fill: #fff1f2; stroke: #e11d48; stroke-width: 1.8; }
+      .box-gray { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.4; }
+      .arrow { fill: none; stroke: #475569; stroke-width: 2.1; marker-end: url(#arrow); }
+      .arrow-blue { fill: none; stroke: #2563eb; stroke-width: 2.1; marker-end: url(#arrowBlue); }
+      .arrow-amber { fill: none; stroke: #b87500; stroke-width: 2.2; marker-end: url(#arrowAmber); }
+      .arrow-green { fill: none; stroke: #059669; stroke-width: 2.1; marker-end: url(#arrowGreen); }
+      .dash { stroke-dasharray: 5 4; }
     </style>
+
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#496579"/>
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
     </marker>
-    <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8f5b00"/>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
     </marker>
-    <symbol id="hex" viewBox="-18 -16 36 32">
-      <polygon points="0,-16 13.86,-8 13.86,8 0,16 -13.86,8 -13.86,-8"/>
-    </symbol>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b87500"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#059669"/>
+    </marker>
+
+    <g id="pointy-hex">
+      <polygon points="0,-31 26.85,-15.5 26.85,15.5 0,31 -26.85,15.5 -26.85,-15.5"/>
+    </g>
   </defs>
 
-  <rect width="1400" height="760" fill="#ffffff"/>
-  <text x="48" y="52" class="title">Directional Hex Convolution</text>
-  <text x="48" y="80" class="small">The model stores axial coordinates in a fixed tensor shape, but the convolution itself follows the six real hex directions.</text>
+  <rect width="1400" height="900" class="bg"/>
 
-  <rect x="40" y="115" width="610" height="570" class="panel"/>
-  <text x="70" y="152" class="section">Masked Axial Storage Slots</text>
-  <text x="70" y="180" class="small">q and r each range from -4 to 4. This is 81 possible axial slots.</text>
-  <text x="70" y="202" class="small">Only 61 are real board cells. The 20 gray slots are masked padding.</text>
+  <text x="48" y="54" class="title">Directional CNN over the Catchup hex board</text>
+  <text x="48" y="82" class="subtitle">The model uses a fixed 9 x 9 tensor for axial coordinates, but each block gathers along the six real hex directions.</text>
+  <text x="48" y="106" class="subtitle">Reference: HexDirectionalCnnPolicyValueNet and HexDirectionalBlock in catchup/training/torch_policy_value.py.</text>
 
-  <g transform="translate(66 245)">
-    <use href="#hex" class="masked" transform="translate(55.00 60.00)"/> <!-- (-4,-4) -->
-    <use href="#hex" class="masked" transform="translate(86.18 60.00)"/> <!-- (-3,-4) -->
-    <use href="#hex" class="masked" transform="translate(117.35 60.00)"/> <!-- (-2,-4) -->
-    <use href="#hex" class="masked" transform="translate(148.53 60.00)"/> <!-- (-1,-4) -->
-    <use href="#hex" class="valid" transform="translate(179.71 60.00)"/> <!-- (0,-4) -->
-    <use href="#hex" class="valid" transform="translate(210.88 60.00)"/> <!-- (1,-4) -->
-    <use href="#hex" class="valid" transform="translate(242.06 60.00)"/> <!-- (2,-4) -->
-    <use href="#hex" class="valid" transform="translate(273.24 60.00)"/> <!-- (3,-4) -->
-    <use href="#hex" class="valid" transform="translate(304.42 60.00)"/> <!-- (4,-4) -->
-    <use href="#hex" class="masked" transform="translate(70.59 87.00)"/> <!-- (-4,-3) -->
-    <use href="#hex" class="masked" transform="translate(101.77 87.00)"/> <!-- (-3,-3) -->
-    <use href="#hex" class="masked" transform="translate(132.94 87.00)"/> <!-- (-2,-3) -->
-    <use href="#hex" class="valid" transform="translate(164.12 87.00)"/> <!-- (-1,-3) -->
-    <use href="#hex" class="valid" transform="translate(195.30 87.00)"/> <!-- (0,-3) -->
-    <use href="#hex" class="valid" transform="translate(226.47 87.00)"/> <!-- (1,-3) -->
-    <use href="#hex" class="valid" transform="translate(257.65 87.00)"/> <!-- (2,-3) -->
-    <use href="#hex" class="valid" transform="translate(288.83 87.00)"/> <!-- (3,-3) -->
-    <use href="#hex" class="valid" transform="translate(320.00 87.00)"/> <!-- (4,-3) -->
-    <use href="#hex" class="masked" transform="translate(86.18 114.00)"/> <!-- (-4,-2) -->
-    <use href="#hex" class="masked" transform="translate(117.35 114.00)"/> <!-- (-3,-2) -->
-    <use href="#hex" class="valid" transform="translate(148.53 114.00)"/> <!-- (-2,-2) -->
-    <use href="#hex" class="valid" transform="translate(179.71 114.00)"/> <!-- (-1,-2) -->
-    <use href="#hex" class="valid" transform="translate(210.88 114.00)"/> <!-- (0,-2) -->
-    <use href="#hex" class="valid" transform="translate(242.06 114.00)"/> <!-- (1,-2) -->
-    <use href="#hex" class="valid" transform="translate(273.24 114.00)"/> <!-- (2,-2) -->
-    <use href="#hex" class="valid" transform="translate(304.42 114.00)"/> <!-- (3,-2) -->
-    <use href="#hex" class="valid" transform="translate(335.59 114.00)"/> <!-- (4,-2) -->
-    <use href="#hex" class="masked" transform="translate(101.77 141.00)"/> <!-- (-4,-1) -->
-    <use href="#hex" class="valid" transform="translate(132.94 141.00)"/> <!-- (-3,-1) -->
-    <use href="#hex" class="valid" transform="translate(164.12 141.00)"/> <!-- (-2,-1) -->
-    <use href="#hex" class="valid" transform="translate(195.30 141.00)"/> <!-- (-1,-1) -->
-    <use href="#hex" class="neighbor" transform="translate(226.47 141.00)"/> <!-- (0,-1) -->
-    <use href="#hex" class="neighbor" transform="translate(257.65 141.00)"/> <!-- (1,-1) -->
-    <use href="#hex" class="valid" transform="translate(288.83 141.00)"/> <!-- (2,-1) -->
-    <use href="#hex" class="valid" transform="translate(320.00 141.00)"/> <!-- (3,-1) -->
-    <use href="#hex" class="valid" transform="translate(351.18 141.00)"/> <!-- (4,-1) -->
-    <use href="#hex" class="valid" transform="translate(117.35 168.00)"/> <!-- (-4,0) -->
-    <use href="#hex" class="valid" transform="translate(148.53 168.00)"/> <!-- (-3,0) -->
-    <use href="#hex" class="valid" transform="translate(179.71 168.00)"/> <!-- (-2,0) -->
-    <use href="#hex" class="neighbor" transform="translate(210.88 168.00)"/> <!-- (-1,0) -->
-    <use href="#hex" class="center" transform="translate(242.06 168.00)"/> <!-- (0,0) -->
-    <use href="#hex" class="neighbor" transform="translate(273.24 168.00)"/> <!-- (1,0) -->
-    <use href="#hex" class="valid" transform="translate(304.42 168.00)"/> <!-- (2,0) -->
-    <use href="#hex" class="valid" transform="translate(335.59 168.00)"/> <!-- (3,0) -->
-    <use href="#hex" class="valid" transform="translate(366.77 168.00)"/> <!-- (4,0) -->
-    <use href="#hex" class="valid" transform="translate(132.94 195.00)"/> <!-- (-4,1) -->
-    <use href="#hex" class="valid" transform="translate(164.12 195.00)"/> <!-- (-3,1) -->
-    <use href="#hex" class="valid" transform="translate(195.30 195.00)"/> <!-- (-2,1) -->
-    <use href="#hex" class="neighbor" transform="translate(226.47 195.00)"/> <!-- (-1,1) -->
-    <use href="#hex" class="neighbor" transform="translate(257.65 195.00)"/> <!-- (0,1) -->
-    <use href="#hex" class="valid" transform="translate(288.83 195.00)"/> <!-- (1,1) -->
-    <use href="#hex" class="valid" transform="translate(320.00 195.00)"/> <!-- (2,1) -->
-    <use href="#hex" class="valid" transform="translate(351.18 195.00)"/> <!-- (3,1) -->
-    <use href="#hex" class="masked" transform="translate(382.36 195.00)"/> <!-- (4,1) -->
-    <use href="#hex" class="valid" transform="translate(148.53 222.00)"/> <!-- (-4,2) -->
-    <use href="#hex" class="valid" transform="translate(179.71 222.00)"/> <!-- (-3,2) -->
-    <use href="#hex" class="valid" transform="translate(210.88 222.00)"/> <!-- (-2,2) -->
-    <use href="#hex" class="valid" transform="translate(242.06 222.00)"/> <!-- (-1,2) -->
-    <use href="#hex" class="valid" transform="translate(273.24 222.00)"/> <!-- (0,2) -->
-    <use href="#hex" class="valid" transform="translate(304.42 222.00)"/> <!-- (1,2) -->
-    <use href="#hex" class="valid" transform="translate(335.59 222.00)"/> <!-- (2,2) -->
-    <use href="#hex" class="masked" transform="translate(366.77 222.00)"/> <!-- (3,2) -->
-    <use href="#hex" class="masked" transform="translate(397.95 222.00)"/> <!-- (4,2) -->
-    <use href="#hex" class="valid" transform="translate(164.12 249.00)"/> <!-- (-4,3) -->
-    <use href="#hex" class="valid" transform="translate(195.30 249.00)"/> <!-- (-3,3) -->
-    <use href="#hex" class="valid" transform="translate(226.47 249.00)"/> <!-- (-2,3) -->
-    <use href="#hex" class="valid" transform="translate(257.65 249.00)"/> <!-- (-1,3) -->
-    <use href="#hex" class="valid" transform="translate(288.83 249.00)"/> <!-- (0,3) -->
-    <use href="#hex" class="valid" transform="translate(320.00 249.00)"/> <!-- (1,3) -->
-    <use href="#hex" class="masked" transform="translate(351.18 249.00)"/> <!-- (2,3) -->
-    <use href="#hex" class="masked" transform="translate(382.36 249.00)"/> <!-- (3,3) -->
-    <use href="#hex" class="masked" transform="translate(413.53 249.00)"/> <!-- (4,3) -->
-    <use href="#hex" class="valid" transform="translate(179.71 276.00)"/> <!-- (-4,4) -->
-    <use href="#hex" class="valid" transform="translate(210.88 276.00)"/> <!-- (-3,4) -->
-    <use href="#hex" class="valid" transform="translate(242.06 276.00)"/> <!-- (-2,4) -->
-    <use href="#hex" class="valid" transform="translate(273.24 276.00)"/> <!-- (-1,4) -->
-    <use href="#hex" class="valid" transform="translate(304.42 276.00)"/> <!-- (0,4) -->
-    <use href="#hex" class="masked" transform="translate(335.59 276.00)"/> <!-- (1,4) -->
-    <use href="#hex" class="masked" transform="translate(366.77 276.00)"/> <!-- (2,4) -->
-    <use href="#hex" class="masked" transform="translate(397.95 276.00)"/> <!-- (3,4) -->
-    <use href="#hex" class="masked" transform="translate(429.12 276.00)"/> <!-- (4,4) -->
+  <rect x="40" y="135" width="410" height="430" rx="10" class="panel"/>
+  <text x="66" y="170" class="section">1. Axial storage mask</text>
+  <text x="66" y="198" class="body">row = r + 4, column = q + 4</text>
+  <text x="66" y="220" class="body">81 tensor slots; 61 valid board cells; 20 masked slots.</text>
 
-    <path d="M 226.47 141.00 L 240.00 164.00" class="dirArrow"/>
-    <path d="M 257.65 141.00 L 244.00 164.00" class="dirArrow"/>
-    <path d="M 210.88 168.00 L 237.00 168.00" class="dirArrow"/>
-    <path d="M 273.24 168.00 L 247.00 168.00" class="dirArrow"/>
-    <path d="M 226.47 195.00 L 240.00 172.00" class="dirArrow"/>
-    <path d="M 257.65 195.00 L 244.00 172.00" class="dirArrow"/>
+  <g transform="translate(93 256)">
+    <rect x="0" y="0" width="270" height="270" rx="4" class="slot-base"/>
+    <rect x="120" y="0" width="150" height="30" class="slot-valid"/>
+    <rect x="90" y="30" width="180" height="30" class="slot-valid"/>
+    <rect x="60" y="60" width="210" height="30" class="slot-valid"/>
+    <rect x="30" y="90" width="240" height="30" class="slot-valid"/>
+    <rect x="0" y="120" width="270" height="30" class="slot-valid"/>
+    <rect x="0" y="150" width="240" height="30" class="slot-valid"/>
+    <rect x="0" y="180" width="210" height="30" class="slot-valid"/>
+    <rect x="0" y="210" width="180" height="30" class="slot-valid"/>
+    <rect x="0" y="240" width="150" height="30" class="slot-valid"/>
 
-    <text x="215" y="172" class="tiny" fill="#ffffff">(0,0)</text>
-    <text x="55" y="326" class="maskLabel">masked slots: q+r &lt; -4 or q+r &gt; 4</text>
+    <rect x="150" y="120" width="30" height="30" class="slot-neighbor"/>
+    <rect x="90" y="120" width="30" height="30" class="slot-neighbor"/>
+    <rect x="120" y="150" width="30" height="30" class="slot-neighbor"/>
+    <rect x="120" y="90" width="30" height="30" class="slot-neighbor"/>
+    <rect x="150" y="90" width="30" height="30" class="slot-neighbor"/>
+    <rect x="90" y="150" width="30" height="30" class="slot-neighbor"/>
+    <rect x="120" y="120" width="30" height="30" class="slot-target"/>
+
+    <path d="M 30 0 V 270 M 60 0 V 270 M 90 0 V 270 M 120 0 V 270 M 150 0 V 270 M 180 0 V 270 M 210 0 V 270 M 240 0 V 270" class="slot-grid"/>
+    <path d="M 0 30 H 270 M 0 60 H 270 M 0 90 H 270 M 0 120 H 270 M 0 150 H 270 M 0 180 H 270 M 0 210 H 270 M 0 240 H 270" class="slot-grid"/>
+    <rect x="0" y="0" width="270" height="270" rx="4" fill="none" stroke="#94a3b8" stroke-width="1.2"/>
+
+    <text x="-29" y="18" class="axis">r=-4</text>
+    <text x="-29" y="138" class="axis">r=0</text>
+    <text x="-29" y="258" class="axis">r=4</text>
+    <text x="4" y="-10" class="axis">q=-4</text>
+    <text x="125" y="-10" class="axis">q=0</text>
+    <text x="245" y="-10" class="axis">q=4</text>
+    <text x="127" y="139" class="target-code">(0,0)</text>
   </g>
 
-  <g transform="translate(85 620)">
-    <use href="#hex" class="valid" transform="translate(0 0)"/>
-    <text x="24" y="5" class="small">real board cell</text>
-    <use href="#hex" class="masked" transform="translate(165 0)"/>
-    <text x="190" y="5" class="small">masked storage slot</text>
-    <use href="#hex" class="neighbor" transform="translate(360 0)"/>
-    <text x="385" y="5" class="small">six gathered neighbors</text>
+  <g transform="translate(66 532)">
+    <rect x="0" y="0" width="17" height="17" class="slot-base"/>
+    <text x="25" y="13" class="small">masked padding</text>
+    <rect x="138" y="0" width="17" height="17" class="slot-valid"/>
+    <text x="163" y="13" class="small">valid cell</text>
+    <rect x="251" y="0" width="17" height="17" class="slot-neighbor"/>
+    <text x="276" y="13" class="small">gathered source</text>
   </g>
 
-  <rect x="690" y="115" width="660" height="570" class="panel"/>
-  <text x="720" y="152" class="section">One Output Cell's Directional Convolution</text>
-  <text x="720" y="180" class="small">For every valid hex cell, the block gathers hidden vectors from the six axial directions.</text>
+  <rect x="490" y="135" width="410" height="430" rx="10" class="panel"/>
+  <text x="516" y="170" class="section">2. Six directional gathers</text>
+  <text x="516" y="198" class="body">For each target slot, _direction_matrices reads these</text>
+  <text x="516" y="220" class="body">source neighbors in code order, then concatenates them.</text>
 
-  <g transform="translate(850 260)">
-    <use href="#hex" class="neighbor" transform="translate(0 -54)"/>
-    <use href="#hex" class="neighbor" transform="translate(31 -27)"/>
-    <use href="#hex" class="neighbor" transform="translate(-31 0)"/>
-    <use href="#hex" class="center" transform="translate(0 0)"/>
-    <use href="#hex" class="neighbor" transform="translate(31 0)"/>
-    <use href="#hex" class="neighbor" transform="translate(-31 27)"/>
-    <use href="#hex" class="neighbor" transform="translate(0 27)"/>
-    <path d="M 0 -54 L 0 -17" class="dirArrow"/>
-    <path d="M 31 -27 L 9 -9" class="dirArrow"/>
-    <path d="M -31 0 L -15 0" class="dirArrow"/>
-    <path d="M 31 0 L 15 0" class="dirArrow"/>
-    <path d="M -31 27 L -9 9" class="dirArrow"/>
-    <path d="M 0 27 L 0 17" class="dirArrow"/>
-    <text x="-32" y="72" class="small">six true hex neighbors</text>
+  <g transform="translate(692 356)">
+    <use href="#pointy-hex" class="hex-neighbor" transform="translate(55.4 0)"/>
+    <use href="#pointy-hex" class="hex-neighbor" transform="translate(-55.4 0)"/>
+    <use href="#pointy-hex" class="hex-neighbor" transform="translate(27.7 48)"/>
+    <use href="#pointy-hex" class="hex-neighbor" transform="translate(-27.7 -48)"/>
+    <use href="#pointy-hex" class="hex-neighbor" transform="translate(27.7 -48)"/>
+    <use href="#pointy-hex" class="hex-neighbor" transform="translate(-27.7 48)"/>
+    <use href="#pointy-hex" class="hex-target" transform="translate(0 0)"/>
+
+    <path d="M 41 0 H 18" class="arrow-amber"/>
+    <path d="M -41 0 H -18" class="arrow-amber"/>
+    <path d="M 20.5 35.5 L 9.5 16" class="arrow-amber"/>
+    <path d="M -20.5 -35.5 L -9.5 -16" class="arrow-amber"/>
+    <path d="M 20.5 -35.5 L 9.5 -16" class="arrow-amber"/>
+    <path d="M -20.5 35.5 L -9.5 16" class="arrow-amber"/>
+
+    <text x="-14" y="5" class="target-code">(q,r)</text>
+    <text x="40" y="-39" class="code-strong">D4</text>
+    <text x="73" y="5" class="code-strong">D0</text>
+    <text x="39" y="64" class="code-strong">D2</text>
+    <text x="-82" y="5" class="code-strong">D1</text>
+    <text x="-87" y="-58" class="code-strong">D3</text>
+    <text x="-88" y="66" class="code-strong">D5</text>
   </g>
 
-  <rect x="1015" y="205" width="245" height="118" class="box2"/>
-  <text x="1040" y="238" class="label">Gathered tensors</text>
-  <text x="1040" y="266" class="small">6 directional maps</text>
-  <text x="1040" y="292" class="small">each has H channels</text>
+  <g transform="translate(525 473)">
+    <rect x="0" y="0" width="330" height="66" rx="8" class="box-amber"/>
+    <text x="17" y="24" class="code-strong">D0..D5 = (1,0), (-1,0), (0,1),</text>
+    <text x="17" y="46" class="code-strong">          (0,-1), (1,-1), (-1,1)</text>
+  </g>
 
-  <rect x="770" y="395" width="190" height="95" class="box"/>
-  <text x="795" y="428" class="label">Self path</text>
-  <text x="795" y="456" class="small">1x1 Conv</text>
-  <text x="795" y="478" class="small">H -&gt; H</text>
+  <rect x="940" y="135" width="420" height="430" rx="10" class="panel"/>
+  <text x="966" y="170" class="section">3. HexDirectionalBlock</text>
+  <text x="966" y="198" class="body">The learned PyTorch convolutions are 1x1.</text>
+  <text x="966" y="220" class="body">The hex geometry comes from the fixed gather matrices.</text>
 
-  <rect x="1015" y="385" width="245" height="115" class="box2"/>
-  <text x="1040" y="418" class="label">Neighbor path</text>
-  <text x="1040" y="446" class="small">concat six directions</text>
-  <text x="1040" y="472" class="small">1x1 Conv: 6H -&gt; H</text>
+  <g transform="translate(970 255)">
+    <rect x="0" y="0" width="150" height="64" rx="8" class="box-blue"/>
+    <text x="18" y="26" class="label">hidden</text>
+    <text x="18" y="48" class="code">H x 9 x 9</text>
 
-  <rect x="890" y="565" width="250" height="75" class="box3"/>
-  <text x="920" y="596" class="label">Residual update</text>
-  <text x="920" y="623" class="small">mask * (hidden + ReLU(self + neighbor))</text>
+    <rect x="238" y="-44" width="150" height="64" rx="8" class="box-blue"/>
+    <text x="256" y="-18" class="label">self_linear</text>
+    <text x="256" y="4" class="code">1x1: H -> H</text>
 
-  <path d="M 930 300 C 965 305 985 270 1010 265" class="arrow"/>
-  <path d="M 930 260 C 990 325 1030 345 1085 380" class="arrow"/>
-  <path d="M 865 335 L 865 390" class="arrow"/>
-  <path d="M 960 442 C 1000 485 960 535 985 560" class="arrow"/>
-  <path d="M 1138 500 C 1138 530 1095 545 1080 560" class="arrow"/>
+    <rect x="238" y="80" width="150" height="72" rx="8" class="box-amber"/>
+    <text x="256" y="107" class="label">neighbor_linear</text>
+    <text x="256" y="129" class="code">1x1: 6H -> H</text>
 
-  <text x="720" y="704" class="formula">Storage uses 81 axial slots for fixed tensor shape; computation masks the 20 invalid slots and gathers only the six real hex directions.</text>
+    <rect x="0" y="88" width="150" height="64" rx="8" class="box-amber"/>
+    <text x="18" y="114" class="label">six gathers</text>
+    <text x="18" y="136" class="code">6H x 9 x 9</text>
+
+    <rect x="87" y="214" width="220" height="72" rx="8" class="box-green"/>
+    <text x="108" y="242" class="label">residual block output</text>
+    <text x="108" y="264" class="code">valid_mask * (hidden + update)</text>
+
+    <path d="M 150 32 C 182 32 196 -7 232 -11" class="arrow-blue"/>
+    <path d="M 150 120 H 232" class="arrow-amber"/>
+    <path d="M 313 20 C 313 70 258 173 218 209" class="arrow-blue"/>
+    <path d="M 313 152 C 313 184 284 200 248 216" class="arrow-amber"/>
+    <path d="M 75 64 V 208" class="arrow dash"/>
+
+    <text x="98" y="184" class="code">update = ReLU(self + neighbor)</text>
+  </g>
+
+  <rect x="40" y="602" width="1320" height="278" rx="10" class="panel"/>
+  <text x="66" y="637" class="section">Full directional-CNN policy/value flow</text>
+
+  <g transform="translate(70 675)">
+    <rect x="0" y="0" width="170" height="94" rx="8" class="box-gray"/>
+    <text x="17" y="28" class="label">311 features</text>
+    <text x="17" y="52" class="code">4 cell flags x 61</text>
+    <text x="17" y="72" class="code">+ legal + scalars</text>
+
+    <rect x="230" y="0" width="190" height="94" rx="8" class="box-blue"/>
+    <text x="247" y="28" class="label">cell_to_grid</text>
+    <text x="247" y="52" class="code">5 cell channels</text>
+    <text x="247" y="72" class="code">-> 5 x 9 x 9</text>
+
+    <rect x="480" y="0" width="190" height="94" rx="8" class="box-green"/>
+    <text x="497" y="28" class="label">broadcast globals</text>
+    <text x="497" y="52" class="code">5 scalars + finish</text>
+    <text x="497" y="72" class="code">-> 6 x 9 x 9</text>
+
+    <rect x="730" y="0" width="170" height="94" rx="8" class="box-blue"/>
+    <text x="747" y="28" class="label">input_projection</text>
+    <text x="747" y="52" class="code">1x1: 11 -> H</text>
+    <text x="747" y="72" class="code">mask invalid</text>
+
+    <rect x="960" y="0" width="170" height="94" rx="8" class="box-amber"/>
+    <text x="977" y="28" class="label">directional blocks</text>
+    <text x="977" y="52" class="code">repeat cnn_layers</text>
+    <text x="977" y="72" class="code">default: 4</text>
+
+    <rect x="104" y="132" width="240" height="74" rx="8" class="box-red"/>
+    <text x="122" y="158" class="label">claim policy logits</text>
+    <text x="122" y="180" class="code">1x1 scorer + index_select</text>
+    <text x="122" y="200" class="code">61 valid cells</text>
+
+    <rect x="424" y="132" width="240" height="74" rx="8" class="box-green"/>
+    <text x="442" y="158" class="label">FINISH logit</text>
+    <text x="442" y="180" class="code">pooled hidden</text>
+    <text x="442" y="200" class="code">+ global encoder</text>
+
+    <rect x="744" y="132" width="240" height="74" rx="8" class="box-green"/>
+    <text x="762" y="158" class="label">value head</text>
+    <text x="762" y="180" class="code">tanh(value_head(combined))</text>
+
+    <path d="M 170 47 H 224" class="arrow"/>
+    <path d="M 420 47 H 474" class="arrow"/>
+    <path d="M 670 47 H 724" class="arrow"/>
+    <path d="M 900 47 H 954" class="arrow"/>
+    <path d="M 1045 94 C 1045 122 310 110 248 128" class="arrow"/>
+    <path d="M 1045 94 C 1045 126 640 112 561 128" class="arrow"/>
+    <path d="M 1045 94 C 1045 130 900 113 862 128" class="arrow"/>
+
+    <rect x="1168" y="10" width="92" height="172" rx="8" class="panel-soft"/>
+    <text x="1184" y="40" class="small">Not a square</text>
+    <text x="1184" y="58" class="small">3x3 kernel.</text>
+    <text x="1184" y="91" class="small">Effective</text>
+    <text x="1184" y="109" class="small">board field:</text>
+    <text x="1184" y="134" class="code-strong">center</text>
+    <text x="1184" y="154" class="code-strong">+ 6 dirs</text>
+  </g>
 </svg>

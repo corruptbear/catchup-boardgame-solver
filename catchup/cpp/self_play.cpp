@@ -34,6 +34,7 @@ struct Config {
     std::string model_path;
     int neural_batch_size = 32;
     double neural_batch_wait_ms = 2.0;
+    NeuralPuctConfig neural_puct_config;
     std::string output_path;
 };
 
@@ -125,6 +126,16 @@ Config parse_config(int argc, char** argv) {
         arg_or_default(args, "puct-rollout", "biased"));
     config.neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
     config.neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "2.0"));
+    config.neural_puct_config.root_noise_epsilon = std::stod(
+        arg_or_default(args, "root-noise-epsilon", "0.25"));
+    config.neural_puct_config.root_dirichlet_total_concentration = std::stod(
+        arg_or_default(args, "root-dirichlet-total-concentration", "10.0"));
+    config.neural_puct_config.root_noise_reference_actions = std::stod(
+        arg_or_default(args, "root-noise-reference-actions", std::to_string(kCellCount)));
+    config.neural_puct_config.root_noise_action_power = std::stod(
+        arg_or_default(args, "root-noise-action-power", "0.5"));
+    config.neural_puct_config.root_noise_empty_power = std::stod(
+        arg_or_default(args, "root-noise-empty-power", "1.0"));
 
     if (config.games <= 0) {
         throw std::runtime_error("games must be positive");
@@ -143,6 +154,22 @@ Config parse_config(int argc, char** argv) {
     }
     if (config.neural_batch_wait_ms < 0.0) {
         throw std::runtime_error("neural-batch-wait-ms must be non-negative");
+    }
+    if (config.neural_puct_config.root_noise_epsilon < 0.0
+            || config.neural_puct_config.root_noise_epsilon > 1.0) {
+        throw std::runtime_error("root-noise-epsilon must be between 0 and 1");
+    }
+    if (config.neural_puct_config.root_dirichlet_total_concentration <= 0.0) {
+        throw std::runtime_error("root-dirichlet-total-concentration must be positive");
+    }
+    if (config.neural_puct_config.root_noise_reference_actions <= 0.0) {
+        throw std::runtime_error("root-noise-reference-actions must be positive");
+    }
+    if (config.neural_puct_config.root_noise_action_power < 0.0) {
+        throw std::runtime_error("root-noise-action-power must be non-negative");
+    }
+    if (config.neural_puct_config.root_noise_empty_power < 0.0) {
+        throw std::runtime_error("root-noise-empty-power must be non-negative");
     }
     return config;
 }
@@ -207,7 +234,11 @@ std::vector<Sample> play_game(
         int action = 0;
         std::vector<double> policy_target;
         if (config.teacher == TeacherKind::NeuralPuct) {
-            NeuralPuctMcts search(config.simulations, search_seed, *neural_evaluator);
+            NeuralPuctMcts search(
+                config.simulations,
+                search_seed,
+                *neural_evaluator,
+                config.neural_puct_config);
             PuctNode* root = search.search(state);
             action = sample_action_from_root(root, rng);
             policy_target = policy_target_from_root(root);
@@ -354,7 +385,17 @@ std::string teacher_label(const Config& config) {
     if (config.teacher == TeacherKind::NeuralPuct) {
         return "neural-puct:" + std::to_string(config.simulations)
             + ":model=" + config.model_path
-            + ":batch=" + std::to_string(config.neural_batch_size);
+            + ":batch=" + std::to_string(config.neural_batch_size)
+            + ":root_noise_epsilon=" + std::to_string(
+                config.neural_puct_config.root_noise_epsilon)
+            + ":root_dirichlet_total_concentration=" + std::to_string(
+                config.neural_puct_config.root_dirichlet_total_concentration)
+            + ":root_noise_reference_actions=" + std::to_string(
+                config.neural_puct_config.root_noise_reference_actions)
+            + ":root_noise_action_power=" + std::to_string(
+                config.neural_puct_config.root_noise_action_power)
+            + ":root_noise_empty_power=" + std::to_string(
+                config.neural_puct_config.root_noise_empty_power);
     }
     return "puct:" + std::to_string(config.simulations)
         + ":prior=" + puct_prior_mode_name(config.puct_config.prior)
