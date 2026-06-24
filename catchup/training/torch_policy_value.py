@@ -31,6 +31,9 @@ LEGAL_MASK_OFFSET = CELL_COUNT * CELL_FEATURE_COUNT
 SCALAR_OFFSET = LEGAL_MASK_OFFSET + ACTION_COUNT
 MLP_ARCHITECTURE = "mlp"
 GNN_ARCHITECTURE = "gnn"
+DIRECTIONAL_CNN_ARCHITECTURE = "directional-cnn"
+GRID_WIDTH = BOARD.radius * 2 + 1
+GRID_CELL_COUNT = GRID_WIDTH * GRID_WIDTH
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,7 @@ class TrainConfig:
     hidden_size: int = 128
     architecture: str = MLP_ARCHITECTURE
     gnn_layers: int = 4
+    cnn_layers: int = 4
     learning_rate: float = 0.001
     value_weight: float = 1.0
     symmetry_copies: int = 3
@@ -139,6 +143,102 @@ class GraphPolicyValueNet(nn.Module):
         return policy_logits, value
 
 
+class HexDirectionalBlock(nn.Module):
+    """Direction-specific convolution over the six axial hex-neighbor directions."""
+
+    def __init__(self, hidden_size: int) -> None:
+        super().__init__()
+        self.self_linear = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
+        self.neighbor_linear = nn.Conv2d(hidden_size * 6, hidden_size, kernel_size=1)
+        self.register_buffer("direction_matrices", _direction_matrices())
+
+    def forward(self, hidden: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
+        batch_size, hidden_size, _, _ = hidden.shape
+        flat = hidden.reshape(batch_size, hidden_size, GRID_CELL_COUNT)
+        directional_neighbors = []
+        for direction in range(6):
+            directional_neighbors.append(
+                torch.matmul(flat, self.direction_matrices[direction])
+                .reshape(batch_size, hidden_size, GRID_WIDTH, GRID_WIDTH)
+            )
+        neighbor_stack = torch.cat(directional_neighbors, dim=1)
+        update = F.relu(self.self_linear(hidden) + self.neighbor_linear(neighbor_stack))
+        return (hidden + update) * valid_mask
+
+
+class HexDirectionalCnnPolicyValueNet(nn.Module):
+    """Directional CNN over the six axial directions of the radius-4 hex board."""
+
+    def __init__(self, hidden_size: int = 128, cnn_layers: int = 4) -> None:
+        super().__init__()
+        input_channels = CELL_FEATURE_COUNT + 1 + GLOBAL_FEATURE_COUNT + 1
+        self.input_projection = nn.Conv2d(input_channels, hidden_size, kernel_size=1)
+        self.blocks = nn.ModuleList(HexDirectionalBlock(hidden_size) for _ in range(cnn_layers))
+        self.global_encoder = nn.Linear(GLOBAL_FEATURE_COUNT + 1, hidden_size)
+        self.claim_policy_scorer = nn.Conv2d(hidden_size, 1, kernel_size=1)
+        self.finish_policy_scorer = nn.Sequential(
+            nn.Linear(hidden_size * 2, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1),
+        )
+        self.value_head = nn.Sequential(
+            nn.Linear(hidden_size * 2, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1),
+        )
+        cell_to_grid = _cell_to_grid_matrix()
+        self.register_buffer("cell_to_grid", cell_to_grid)
+        self.register_buffer("grid_to_cell", cell_to_grid.transpose(0, 1))
+        self.register_buffer("cell_grid_indices", _cell_grid_indices(), persistent=False)
+        self.register_buffer("valid_mask", _valid_grid_mask())
+
+    def forward(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = features.shape[0]
+        cell_flags = features[:, :LEGAL_MASK_OFFSET].reshape(
+            batch_size,
+            CELL_FEATURE_COUNT,
+            CELL_COUNT,
+        )
+        legal_mask = features[:, LEGAL_MASK_OFFSET:SCALAR_OFFSET]
+        legal_claims = legal_mask[:, :CELL_COUNT].unsqueeze(1)
+        finish_legal = legal_mask[:, FINISH].unsqueeze(-1)
+        scalars = features[:, SCALAR_OFFSET:]
+        global_features = torch.cat((scalars, finish_legal), dim=1)
+
+        cell_features = torch.cat((cell_flags, legal_claims), dim=1)
+        cell_grid = torch.matmul(cell_features, self.cell_to_grid).reshape(
+            batch_size,
+            CELL_FEATURE_COUNT + 1,
+            GRID_WIDTH,
+            GRID_WIDTH,
+        )
+        global_grid = global_features.unsqueeze(-1).unsqueeze(-1).expand(
+            -1,
+            -1,
+            GRID_WIDTH,
+            GRID_WIDTH,
+        )
+        valid_mask = self.valid_mask.to(dtype=features.dtype)
+        hidden = F.relu(self.input_projection(torch.cat((cell_grid, global_grid), dim=1)))
+        hidden = hidden * valid_mask
+        for block in self.blocks:
+            hidden = block(hidden, valid_mask)
+
+        pooled = (hidden * valid_mask).sum(dim=(2, 3)) / CELL_COUNT
+        global_hidden = F.relu(self.global_encoder(global_features))
+        combined = torch.cat((pooled, global_hidden), dim=1)
+
+        claim_grid = self.claim_policy_scorer(hidden).reshape(batch_size, GRID_CELL_COUNT)
+        # AOTInductor on MPS miscompiled this final one-hot matmul for the
+        # directional CNN policy head. Direct indexing is the same gather and
+        # keeps the exported package aligned with eager PyTorch.
+        claim_logits = claim_grid.index_select(1, self.cell_grid_indices)
+        finish_logit = self.finish_policy_scorer(combined)
+        policy_logits = torch.cat((claim_logits, finish_logit), dim=1)
+        value = torch.tanh(self.value_head(combined)).squeeze(-1)
+        return policy_logits, value
+
+
 def _neighbor_matrix() -> torch.Tensor:
     matrix = torch.zeros((CELL_COUNT, CELL_COUNT), dtype=torch.float32)
     for cell, neighbors in enumerate(BOARD.neighbors):
@@ -148,16 +248,63 @@ def _neighbor_matrix() -> torch.Tensor:
     return matrix
 
 
+def _grid_index(q: int, r: int) -> int:
+    row = r + BOARD.radius
+    column = q + BOARD.radius
+    return row * GRID_WIDTH + column
+
+
+def _cell_to_grid_matrix() -> torch.Tensor:
+    matrix = torch.zeros((CELL_COUNT, GRID_CELL_COUNT), dtype=torch.float32)
+    for cell, (q, r) in enumerate(BOARD.coords):
+        matrix[cell, _grid_index(q, r)] = 1.0
+    return matrix
+
+
+def _cell_grid_indices() -> torch.Tensor:
+    return torch.tensor(
+        [_grid_index(q, r) for q, r in BOARD.coords],
+        dtype=torch.long,
+    )
+
+
+def _valid_grid_mask() -> torch.Tensor:
+    mask = torch.zeros((1, 1, GRID_WIDTH, GRID_WIDTH), dtype=torch.float32)
+    for q, r in BOARD.coords:
+        mask[0, 0, r + BOARD.radius, q + BOARD.radius] = 1.0
+    return mask
+
+
+def _direction_matrices() -> torch.Tensor:
+    directions = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1))
+    matrices = torch.zeros((6, GRID_CELL_COUNT, GRID_CELL_COUNT), dtype=torch.float32)
+    for direction_index, (dq, dr) in enumerate(directions):
+        for q, r in BOARD.coords:
+            neighbor = BOARD.coord_to_index.get((q + dq, r + dr))
+            if neighbor is None:
+                continue
+            source_q, source_r = BOARD.coords[neighbor]
+            matrices[
+                direction_index,
+                _grid_index(source_q, source_r),
+                _grid_index(q, r),
+            ] = 1.0
+    return matrices
+
+
 def build_model(
     architecture: str,
     *,
     hidden_size: int,
     gnn_layers: int,
+    cnn_layers: int,
 ) -> nn.Module:
     if architecture == MLP_ARCHITECTURE:
         return PolicyValueNet(hidden_size=hidden_size)
     if architecture == GNN_ARCHITECTURE:
         return GraphPolicyValueNet(hidden_size=hidden_size, gnn_layers=gnn_layers)
+    if architecture == DIRECTIONAL_CNN_ARCHITECTURE:
+        return HexDirectionalCnnPolicyValueNet(hidden_size=hidden_size, cnn_layers=cnn_layers)
     raise ValueError(f"unknown architecture: {architecture}")
 
 
@@ -167,6 +314,7 @@ def build_model_from_metadata(metadata: dict[str, Any]) -> nn.Module:
         architecture,
         hidden_size=int(metadata["hidden_size"]),
         gnn_layers=int(metadata.get("gnn_layers", TrainConfig.gnn_layers)),
+        cnn_layers=int(metadata.get("cnn_layers", TrainConfig.cnn_layers)),
     )
 
 
@@ -339,6 +487,7 @@ def train(config: TrainConfig) -> dict[str, Any]:
         config.architecture,
         hidden_size=config.hidden_size,
         gnn_layers=config.gnn_layers,
+        cnn_layers=config.cnn_layers,
     ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     history: list[dict[str, Any]] = []
@@ -423,7 +572,7 @@ def set_seeds(seed: int) -> None:
 
 
 def save_checkpoint(
-    model: PolicyValueNet,
+    model: nn.Module,
     config: TrainConfig,
     train_paths: list[Path],
     validation_paths: list[Path],
@@ -437,6 +586,7 @@ def save_checkpoint(
         "hidden_size": config.hidden_size,
         "architecture": config.architecture,
         "gnn_layers": config.gnn_layers,
+        "cnn_layers": config.cnn_layers,
         "action_count": ACTION_COUNT,
         "train_paths": [str(path) for path in train_paths],
         "validation_paths": [str(path) for path in validation_paths],
@@ -471,10 +621,15 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
     parser.add_argument("--hidden-size", type=int, default=TrainConfig.hidden_size)
     parser.add_argument(
         "--architecture",
-        choices=(MLP_ARCHITECTURE, GNN_ARCHITECTURE),
+        choices=(
+            MLP_ARCHITECTURE,
+            GNN_ARCHITECTURE,
+            DIRECTIONAL_CNN_ARCHITECTURE,
+        ),
         default=TrainConfig.architecture,
     )
     parser.add_argument("--gnn-layers", type=int, default=TrainConfig.gnn_layers)
+    parser.add_argument("--cnn-layers", type=int, default=TrainConfig.cnn_layers)
     parser.add_argument("--learning-rate", type=float, default=TrainConfig.learning_rate)
     parser.add_argument("--value-weight", type=float, default=TrainConfig.value_weight)
     parser.add_argument("--symmetry-copies", type=int, default=TrainConfig.symmetry_copies)
@@ -491,6 +646,7 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
         hidden_size=args.hidden_size,
         architecture=args.architecture,
         gnn_layers=args.gnn_layers,
+        cnn_layers=args.cnn_layers,
         learning_rate=args.learning_rate,
         value_weight=args.value_weight,
         symmetry_copies=args.symmetry_copies,

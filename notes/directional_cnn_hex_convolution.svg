@@ -1,0 +1,193 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760">
+  <defs>
+    <style>
+      .title { font: 700 30px Arial, sans-serif; fill: #102a43; }
+      .section { font: 700 22px Arial, sans-serif; fill: #102a43; }
+      .label { font: 600 16px Arial, sans-serif; fill: #153449; }
+      .small { font: 14px Arial, sans-serif; fill: #425466; }
+      .tiny { font: 12px Arial, sans-serif; fill: #425466; }
+      .panel { fill: #fbfdff; stroke: #bfd2e3; stroke-width: 2; rx: 12; }
+      .valid { fill: #dff7f2; stroke: #0c7f73; stroke-width: 1.4; }
+      .masked { fill: #eef2f6; stroke: #b6c2cf; stroke-width: 1.2; opacity: 0.78; }
+      .center { fill: #1748ff; stroke: #092aa8; stroke-width: 2; }
+      .neighbor { fill: #ffd878; stroke: #c17800; stroke-width: 1.7; }
+      .ghost { fill: #f4f6f8; stroke: #c5ced8; stroke-width: 1.2; stroke-dasharray: 4 3; }
+      .box { fill: #f7fbff; stroke: #2f80ed; stroke-width: 2; rx: 8; }
+      .box2 { fill: #fff8e6; stroke: #d28b00; stroke-width: 2; rx: 8; }
+      .box3 { fill: #f1fff7; stroke: #159957; stroke-width: 2; rx: 8; }
+      .arrow { stroke: #496579; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .dirArrow { stroke: #8f5b00; stroke-width: 2.1; fill: none; marker-end: url(#arrowOrange); opacity: 0.9; }
+      .maskLabel { font: 12px Arial, sans-serif; fill: #6c7a89; }
+      .formula { font: 700 16px Arial, sans-serif; fill: #102a43; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#496579"/>
+    </marker>
+    <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8f5b00"/>
+    </marker>
+    <symbol id="hex" viewBox="-18 -16 36 32">
+      <polygon points="0,-16 13.86,-8 13.86,8 0,16 -13.86,8 -13.86,-8"/>
+    </symbol>
+  </defs>
+
+  <rect width="1400" height="760" fill="#ffffff"/>
+  <text x="48" y="52" class="title">Directional Hex Convolution</text>
+  <text x="48" y="80" class="small">The model stores axial coordinates in a fixed tensor shape, but the convolution itself follows the six real hex directions.</text>
+
+  <rect x="40" y="115" width="610" height="570" class="panel"/>
+  <text x="70" y="152" class="section">Masked Axial Storage Slots</text>
+  <text x="70" y="180" class="small">q and r each range from -4 to 4. This is 81 possible axial slots.</text>
+  <text x="70" y="202" class="small">Only 61 are real board cells. The 20 gray slots are masked padding.</text>
+
+  <g transform="translate(66 245)">
+    <use href="#hex" class="masked" transform="translate(55.00 60.00)"/> <!-- (-4,-4) -->
+    <use href="#hex" class="masked" transform="translate(86.18 60.00)"/> <!-- (-3,-4) -->
+    <use href="#hex" class="masked" transform="translate(117.35 60.00)"/> <!-- (-2,-4) -->
+    <use href="#hex" class="masked" transform="translate(148.53 60.00)"/> <!-- (-1,-4) -->
+    <use href="#hex" class="valid" transform="translate(179.71 60.00)"/> <!-- (0,-4) -->
+    <use href="#hex" class="valid" transform="translate(210.88 60.00)"/> <!-- (1,-4) -->
+    <use href="#hex" class="valid" transform="translate(242.06 60.00)"/> <!-- (2,-4) -->
+    <use href="#hex" class="valid" transform="translate(273.24 60.00)"/> <!-- (3,-4) -->
+    <use href="#hex" class="valid" transform="translate(304.42 60.00)"/> <!-- (4,-4) -->
+    <use href="#hex" class="masked" transform="translate(70.59 87.00)"/> <!-- (-4,-3) -->
+    <use href="#hex" class="masked" transform="translate(101.77 87.00)"/> <!-- (-3,-3) -->
+    <use href="#hex" class="masked" transform="translate(132.94 87.00)"/> <!-- (-2,-3) -->
+    <use href="#hex" class="valid" transform="translate(164.12 87.00)"/> <!-- (-1,-3) -->
+    <use href="#hex" class="valid" transform="translate(195.30 87.00)"/> <!-- (0,-3) -->
+    <use href="#hex" class="valid" transform="translate(226.47 87.00)"/> <!-- (1,-3) -->
+    <use href="#hex" class="valid" transform="translate(257.65 87.00)"/> <!-- (2,-3) -->
+    <use href="#hex" class="valid" transform="translate(288.83 87.00)"/> <!-- (3,-3) -->
+    <use href="#hex" class="valid" transform="translate(320.00 87.00)"/> <!-- (4,-3) -->
+    <use href="#hex" class="masked" transform="translate(86.18 114.00)"/> <!-- (-4,-2) -->
+    <use href="#hex" class="masked" transform="translate(117.35 114.00)"/> <!-- (-3,-2) -->
+    <use href="#hex" class="valid" transform="translate(148.53 114.00)"/> <!-- (-2,-2) -->
+    <use href="#hex" class="valid" transform="translate(179.71 114.00)"/> <!-- (-1,-2) -->
+    <use href="#hex" class="valid" transform="translate(210.88 114.00)"/> <!-- (0,-2) -->
+    <use href="#hex" class="valid" transform="translate(242.06 114.00)"/> <!-- (1,-2) -->
+    <use href="#hex" class="valid" transform="translate(273.24 114.00)"/> <!-- (2,-2) -->
+    <use href="#hex" class="valid" transform="translate(304.42 114.00)"/> <!-- (3,-2) -->
+    <use href="#hex" class="valid" transform="translate(335.59 114.00)"/> <!-- (4,-2) -->
+    <use href="#hex" class="masked" transform="translate(101.77 141.00)"/> <!-- (-4,-1) -->
+    <use href="#hex" class="valid" transform="translate(132.94 141.00)"/> <!-- (-3,-1) -->
+    <use href="#hex" class="valid" transform="translate(164.12 141.00)"/> <!-- (-2,-1) -->
+    <use href="#hex" class="valid" transform="translate(195.30 141.00)"/> <!-- (-1,-1) -->
+    <use href="#hex" class="neighbor" transform="translate(226.47 141.00)"/> <!-- (0,-1) -->
+    <use href="#hex" class="neighbor" transform="translate(257.65 141.00)"/> <!-- (1,-1) -->
+    <use href="#hex" class="valid" transform="translate(288.83 141.00)"/> <!-- (2,-1) -->
+    <use href="#hex" class="valid" transform="translate(320.00 141.00)"/> <!-- (3,-1) -->
+    <use href="#hex" class="valid" transform="translate(351.18 141.00)"/> <!-- (4,-1) -->
+    <use href="#hex" class="valid" transform="translate(117.35 168.00)"/> <!-- (-4,0) -->
+    <use href="#hex" class="valid" transform="translate(148.53 168.00)"/> <!-- (-3,0) -->
+    <use href="#hex" class="valid" transform="translate(179.71 168.00)"/> <!-- (-2,0) -->
+    <use href="#hex" class="neighbor" transform="translate(210.88 168.00)"/> <!-- (-1,0) -->
+    <use href="#hex" class="center" transform="translate(242.06 168.00)"/> <!-- (0,0) -->
+    <use href="#hex" class="neighbor" transform="translate(273.24 168.00)"/> <!-- (1,0) -->
+    <use href="#hex" class="valid" transform="translate(304.42 168.00)"/> <!-- (2,0) -->
+    <use href="#hex" class="valid" transform="translate(335.59 168.00)"/> <!-- (3,0) -->
+    <use href="#hex" class="valid" transform="translate(366.77 168.00)"/> <!-- (4,0) -->
+    <use href="#hex" class="valid" transform="translate(132.94 195.00)"/> <!-- (-4,1) -->
+    <use href="#hex" class="valid" transform="translate(164.12 195.00)"/> <!-- (-3,1) -->
+    <use href="#hex" class="valid" transform="translate(195.30 195.00)"/> <!-- (-2,1) -->
+    <use href="#hex" class="neighbor" transform="translate(226.47 195.00)"/> <!-- (-1,1) -->
+    <use href="#hex" class="neighbor" transform="translate(257.65 195.00)"/> <!-- (0,1) -->
+    <use href="#hex" class="valid" transform="translate(288.83 195.00)"/> <!-- (1,1) -->
+    <use href="#hex" class="valid" transform="translate(320.00 195.00)"/> <!-- (2,1) -->
+    <use href="#hex" class="valid" transform="translate(351.18 195.00)"/> <!-- (3,1) -->
+    <use href="#hex" class="masked" transform="translate(382.36 195.00)"/> <!-- (4,1) -->
+    <use href="#hex" class="valid" transform="translate(148.53 222.00)"/> <!-- (-4,2) -->
+    <use href="#hex" class="valid" transform="translate(179.71 222.00)"/> <!-- (-3,2) -->
+    <use href="#hex" class="valid" transform="translate(210.88 222.00)"/> <!-- (-2,2) -->
+    <use href="#hex" class="valid" transform="translate(242.06 222.00)"/> <!-- (-1,2) -->
+    <use href="#hex" class="valid" transform="translate(273.24 222.00)"/> <!-- (0,2) -->
+    <use href="#hex" class="valid" transform="translate(304.42 222.00)"/> <!-- (1,2) -->
+    <use href="#hex" class="valid" transform="translate(335.59 222.00)"/> <!-- (2,2) -->
+    <use href="#hex" class="masked" transform="translate(366.77 222.00)"/> <!-- (3,2) -->
+    <use href="#hex" class="masked" transform="translate(397.95 222.00)"/> <!-- (4,2) -->
+    <use href="#hex" class="valid" transform="translate(164.12 249.00)"/> <!-- (-4,3) -->
+    <use href="#hex" class="valid" transform="translate(195.30 249.00)"/> <!-- (-3,3) -->
+    <use href="#hex" class="valid" transform="translate(226.47 249.00)"/> <!-- (-2,3) -->
+    <use href="#hex" class="valid" transform="translate(257.65 249.00)"/> <!-- (-1,3) -->
+    <use href="#hex" class="valid" transform="translate(288.83 249.00)"/> <!-- (0,3) -->
+    <use href="#hex" class="valid" transform="translate(320.00 249.00)"/> <!-- (1,3) -->
+    <use href="#hex" class="masked" transform="translate(351.18 249.00)"/> <!-- (2,3) -->
+    <use href="#hex" class="masked" transform="translate(382.36 249.00)"/> <!-- (3,3) -->
+    <use href="#hex" class="masked" transform="translate(413.53 249.00)"/> <!-- (4,3) -->
+    <use href="#hex" class="valid" transform="translate(179.71 276.00)"/> <!-- (-4,4) -->
+    <use href="#hex" class="valid" transform="translate(210.88 276.00)"/> <!-- (-3,4) -->
+    <use href="#hex" class="valid" transform="translate(242.06 276.00)"/> <!-- (-2,4) -->
+    <use href="#hex" class="valid" transform="translate(273.24 276.00)"/> <!-- (-1,4) -->
+    <use href="#hex" class="valid" transform="translate(304.42 276.00)"/> <!-- (0,4) -->
+    <use href="#hex" class="masked" transform="translate(335.59 276.00)"/> <!-- (1,4) -->
+    <use href="#hex" class="masked" transform="translate(366.77 276.00)"/> <!-- (2,4) -->
+    <use href="#hex" class="masked" transform="translate(397.95 276.00)"/> <!-- (3,4) -->
+    <use href="#hex" class="masked" transform="translate(429.12 276.00)"/> <!-- (4,4) -->
+
+    <path d="M 226.47 141.00 L 240.00 164.00" class="dirArrow"/>
+    <path d="M 257.65 141.00 L 244.00 164.00" class="dirArrow"/>
+    <path d="M 210.88 168.00 L 237.00 168.00" class="dirArrow"/>
+    <path d="M 273.24 168.00 L 247.00 168.00" class="dirArrow"/>
+    <path d="M 226.47 195.00 L 240.00 172.00" class="dirArrow"/>
+    <path d="M 257.65 195.00 L 244.00 172.00" class="dirArrow"/>
+
+    <text x="215" y="172" class="tiny" fill="#ffffff">(0,0)</text>
+    <text x="55" y="326" class="maskLabel">masked slots: q+r &lt; -4 or q+r &gt; 4</text>
+  </g>
+
+  <g transform="translate(85 620)">
+    <use href="#hex" class="valid" transform="translate(0 0)"/>
+    <text x="24" y="5" class="small">real board cell</text>
+    <use href="#hex" class="masked" transform="translate(165 0)"/>
+    <text x="190" y="5" class="small">masked storage slot</text>
+    <use href="#hex" class="neighbor" transform="translate(360 0)"/>
+    <text x="385" y="5" class="small">six gathered neighbors</text>
+  </g>
+
+  <rect x="690" y="115" width="660" height="570" class="panel"/>
+  <text x="720" y="152" class="section">One Output Cell's Directional Convolution</text>
+  <text x="720" y="180" class="small">For every valid hex cell, the block gathers hidden vectors from the six axial directions.</text>
+
+  <g transform="translate(850 260)">
+    <use href="#hex" class="neighbor" transform="translate(0 -54)"/>
+    <use href="#hex" class="neighbor" transform="translate(31 -27)"/>
+    <use href="#hex" class="neighbor" transform="translate(-31 0)"/>
+    <use href="#hex" class="center" transform="translate(0 0)"/>
+    <use href="#hex" class="neighbor" transform="translate(31 0)"/>
+    <use href="#hex" class="neighbor" transform="translate(-31 27)"/>
+    <use href="#hex" class="neighbor" transform="translate(0 27)"/>
+    <path d="M 0 -54 L 0 -17" class="dirArrow"/>
+    <path d="M 31 -27 L 9 -9" class="dirArrow"/>
+    <path d="M -31 0 L -15 0" class="dirArrow"/>
+    <path d="M 31 0 L 15 0" class="dirArrow"/>
+    <path d="M -31 27 L -9 9" class="dirArrow"/>
+    <path d="M 0 27 L 0 17" class="dirArrow"/>
+    <text x="-32" y="72" class="small">six true hex neighbors</text>
+  </g>
+
+  <rect x="1015" y="205" width="245" height="118" class="box2"/>
+  <text x="1040" y="238" class="label">Gathered tensors</text>
+  <text x="1040" y="266" class="small">6 directional maps</text>
+  <text x="1040" y="292" class="small">each has H channels</text>
+
+  <rect x="770" y="395" width="190" height="95" class="box"/>
+  <text x="795" y="428" class="label">Self path</text>
+  <text x="795" y="456" class="small">1x1 Conv</text>
+  <text x="795" y="478" class="small">H -&gt; H</text>
+
+  <rect x="1015" y="385" width="245" height="115" class="box2"/>
+  <text x="1040" y="418" class="label">Neighbor path</text>
+  <text x="1040" y="446" class="small">concat six directions</text>
+  <text x="1040" y="472" class="small">1x1 Conv: 6H -&gt; H</text>
+
+  <rect x="890" y="565" width="250" height="75" class="box3"/>
+  <text x="920" y="596" class="label">Residual update</text>
+  <text x="920" y="623" class="small">mask * (hidden + ReLU(self + neighbor))</text>
+
+  <path d="M 930 300 C 965 305 985 270 1010 265" class="arrow"/>
+  <path d="M 930 260 C 990 325 1030 345 1085 380" class="arrow"/>
+  <path d="M 865 335 L 865 390" class="arrow"/>
+  <path d="M 960 442 C 1000 485 960 535 985 560" class="arrow"/>
+  <path d="M 1138 500 C 1138 530 1095 545 1080 560" class="arrow"/>
+
+  <text x="720" y="704" class="formula">Storage uses 81 axial slots for fixed tensor shape; computation masks the 20 invalid slots and gathers only the six real hex directions.</text>
+</svg>

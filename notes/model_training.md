@@ -306,6 +306,204 @@ So the graph model is clearly better than the first MLP and random play, but it
 is not yet competitive with the C++ random-rollout MCTS baseline at 1000
 simulations.
 
+## Directional CNN Model Experiment
+
+```text
+architecture=directional-cnn
+```
+
+![Directional hex convolution](directional_cnn_hex_convolution.svg)
+
+The directional CNN tests whether a fixed-board convolution can beat the
+current graph model while preserving the real hex-neighbor directions. It still
+consumes the same 311-number feature vector. It maps the 61 board cells into a
+`9 x 9` axial-coordinate grid:
+
+```text
+row = r + 4
+column = q + 4
+```
+
+The 20 invalid padded grid locations are masked after each layer. The model then
+extracts the 61 valid claim logits from the grid and appends the FINISH logit.
+
+The directional CNN uses six direction-specific neighbor aggregations matching
+the axial hex directions:
+
+```text
+(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)
+```
+
+This is a hex 1-ring convolution, not a normal square `3 x 3` convolution.
+Each block first gathers the hidden state from the six adjacent hex directions,
+then concatenates those six directional neighbor tensors. The learned PyTorch
+`Conv2d` operations are both `1 x 1`:
+
+```text
+self path       Conv2d(hidden_size -> hidden_size, kernel_size=1)
+neighbor path   Conv2d(6 * hidden_size -> hidden_size, kernel_size=1)
+next hidden     hidden + ReLU(self path + neighbor path)
+```
+
+The learned kernel size is `1 x 1`, but the effective board kernel is:
+
+```text
+center cell + 6 adjacent hex cells
+```
+
+So each directional block has a radius-1, 7-position hex receptive field. With
+4 stacked blocks, a cell representation can receive information from up to
+roughly hex distance 4.
+
+Hidden-size 64 is the first serious directional-CNN comparison. It keeps 4
+directional blocks but uses fewer channels than the 128-dimensional GNN:
+
+```text
+directional-CNN, hidden_size 64, cnn_layers 4: 133123 trainable parameters
+GNN, hidden_size 128, gnn_layers 4:            201731 trainable parameters
+```
+
+Complete `directional-cnn` parameter count with `hidden_size = 64` and
+`cnn_layers = 4`:
+
+```text
+input projection:
+    Conv2d(11 -> 64, 1x1)           11 * 64 + 64        =    768
+
+directional blocks:
+    one block:
+        self Conv2d(64 -> 64)       64 * 64 + 64        =   4160
+        dir Conv2d(384 -> 64)       6 * 64 * 64 + 64    =  24640
+        one block total                                     28800
+    4 blocks                                             115200
+
+global encoder:
+    Linear(6 -> 64)                 6 * 64 + 64         =    448
+
+policy head:
+    claim Conv2d(64 -> 1, 1x1)      64 * 1 + 1          =     65
+    FINISH subnetwork:
+        Linear(128 -> 64)           128 * 64 + 64       =   8256
+        Linear(64 -> 1)             64 * 1 + 1          =     65
+    policy head total                                       8386
+
+value head:
+    Linear(128 -> 64)               128 * 64 + 64       =   8256
+    Linear(64 -> 1)                 64 * 1 + 1          =     65
+    value head total                                        8321
+
+total:
+    768 + 115200 + 448 + 8386 + 8321 = 133123
+```
+
+For size comparison:
+
+```text
+directional-CNN h64 directional blocks only: 115200
+directional-CNN h64 whole model:              133123
+
+GNN h128 message layers only:                 133120
+GNN h128 whole model:                         201731
+```
+
+So yes, the h64 directional-CNN whole model is about the same size as the h128
+GNN's message-passing stack alone. The h128 GNN's full parameter count is higher
+because its cell encoder, global encoder, policy head, and value head also use
+128-wide hidden vectors. The directional block learns different mixing weights
+for each of the six directions. A cheaper later variant would sum or average the
+six directional neighbor tensors first, then project `hidden_size ->
+hidden_size`; that would keep exact hex directions while making each directional
+block smaller.
+
+Smoke training commands:
+
+```sh
+python3.10 -m catchup.training.torch_policy_value --architecture directional-cnn --cnn-layers 2 --data-glob 'data/bootstrap/shard_000[1-2]_50g_10k.jsonl' --validation-shards 1 --epochs 1 --batch-size 512 --hidden-size 32 --symmetry-copies 1 --device cpu --out /private/tmp/catchup_directional_cnn_smoke.pt --metrics-out /private/tmp/catchup_directional_cnn_smoke_metrics.json
+```
+
+Smoke results only verify that the training loop works. They are not strength
+evidence:
+
+```text
+directional-CNN smoke:
+validation policy top1  6.7%
+validation value acc    52.0%
+epoch time              2.50s CPU
+```
+
+Training command:
+
+```sh
+python3.10 -m catchup.training.torch_policy_value --architecture directional-cnn --cnn-layers 4 --data-glob 'data/bootstrap/shard_*_50g_10k.jsonl' --validation-shards 3 --epochs 20 --batch-size 1024 --hidden-size 64 --symmetry-copies 3 --device mps --out data/models/directional_cnn_h64_30shards_3sym_20ep.pt --metrics-out data/models/directional_cnn_h64_30shards_3sym_20ep_metrics.json
+```
+
+Saved artifacts:
+
+```text
+data/models/directional_cnn_h64_30shards_3sym_20ep.pt
+data/models/directional_cnn_h64_30shards_3sym_20ep_metrics.json
+data/models/directional_cnn_h64_30shards_3sym_20ep_exported_b32.pt2
+data/models/directional_cnn_h64_30shards_3sym_20ep_aoti_mps_b32.pt2
+data/models/directional_cnn_h64_30shards_3sym_20ep_exported_b32_gather.pt2
+data/models/directional_cnn_h64_30shards_3sym_20ep_aoti_mps_b32_gather.pt2
+```
+
+Validation results:
+
+```text
+best validation loss          epoch 19, 3.2165
+best validation policy top1   epoch 20, 35.8%
+best validation value acc     epoch 17, 70.3%
+final epoch policy top1       35.8%
+final epoch value acc         70.1%
+```
+
+The supervised validation metrics look better than the 20-epoch GNN baseline.
+One important export bug showed up in the directional-CNN claim-policy readout.
+The problematic expression was:
+
+```python
+claim_logits = torch.matmul(claim_grid, self.grid_to_cell)
+```
+
+This is mathematically just a gather from the 9x9 storage grid back to the 61
+real cells. The exported program matched eager PyTorch, but the compiled AOTI
+package gave wrong legal-action priors:
+
+```text
+old AOTI package, opening board:
+Python checkpoint top action 30
+AOTI package top action     40
+legal prior L1 error        0.7826
+
+old AOTI package, early_a:
+Python checkpoint top action 14
+AOTI package top action     42
+legal prior L1 error        1.4376
+```
+
+The fix is to express the same readout as direct indexing:
+
+```python
+claim_logits = claim_grid.index_select(1, self.cell_grid_indices)
+```
+
+The fixed package was checked against the Python checkpoint on legal priors.
+
+Arena sanity checks after this export fix:
+
+```text
+directional-CNN h64 neural-puct:100 vs GNN 20ep neural-puct:100
+pairs 5, games 10, threads 5, seed 1
+result 8-2
+real 96.89s
+
+directional-CNN h64 neural-puct:100 vs mcts:1000
+pairs 5, games 10, threads 5, seed 1
+result 7-3
+real 54.13s
+```
+
 ## Losses And Metrics
 
 The training loss is:
@@ -375,10 +573,10 @@ then raises an internal `AssertionError`. The export helper treats that as a
 warning only when the requested package file exists. If the package is missing,
 it fails.
 
-The C++ smoke runner is:
+The C++ neural evaluator lives in:
 
 ```text
-catchup/cpp/aoti_smoke.cpp
+catchup/cpp/puct_neural.cpp
 ```
 
 It loads the `.pt2` package with:
@@ -400,7 +598,12 @@ device index `0` failed with:
 Incorrect device passed to aoti_runner_mps
 ```
 
-C++ smoke output for the 20 epoch graph model:
+The old standalone `catchup/cpp/aoti_smoke.cpp` diagnostic was removed after
+the real C++ neural PUCT path became runnable. Use `catchup_mcts --engine
+neural-puct` or the arena/self-play neural commands for smoke tests.
+
+C++ smoke output from the direct AOTI diagnostic for the 20 epoch graph model
+was:
 
 ```text
 outputs=2
@@ -476,12 +679,12 @@ use different model paths, each model gets its own batcher.
 
 ## Batched Neural Evaluation
 
-Neural arena and self-play should batch evaluations across games, not inside one
-game's search tree. Each game thread still runs its PUCT loop in order. When a
-search needs a model evaluation, it sends the leaf state to one shared evaluator
-and waits for the result. The evaluator collects requests from multiple game
-threads, runs one MPS batch, then returns each result to the game that requested
-it.
+The current C++ arena and self-play implementations batch evaluations across
+games, not inside one game's search tree. Each game thread still runs its PUCT
+loop in order. When a search needs a model evaluation, it sends the leaf state
+to one shared evaluator and waits for the result. The evaluator collects
+requests from multiple game threads, runs one MPS batch, then returns each
+result to the game that requested it.
 
 That gives this shape:
 
@@ -514,6 +717,30 @@ Generate neural self-play data with:
 ```sh
 catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --out data/neural_self_play_smoke.jsonl
 ```
+
+For arena benchmarking with a batch-32 package, the number of active game
+workers matters. A batcher shared by only 16 active neural-vs-neural games was
+often underfed:
+
+```text
+neural-puct:100 vs neural-puct:100
+pairs 16, games 32, threads 16, neural batch size 32
+real 114.10s
+average internal actions 57.9
+```
+
+With 32 active workers, the same batch size was much better utilized:
+
+```text
+neural-puct:100 vs neural-puct:100
+pairs 32, games 64, threads 32, neural batch size 32
+real 52.80s
+average internal actions 57.5
+```
+
+This processed twice as many games in less than half the wall time. The practical
+rule is: for fixed-batch neural arena runs, keep the number of active game
+workers near the inference batch size, or use a smaller exported batch size.
 
 ## Known Gaps
 

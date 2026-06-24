@@ -24,12 +24,47 @@ class TorchPolicyValueTest(unittest.TestCase):
         self.assertEqual(tuple(policy_logits.shape), (3, trainer.ACTION_COUNT))
         self.assertEqual(tuple(value.shape), (3,))
 
+    def test_directional_cnn_forward_returns_policy_and_value_shapes(self) -> None:
+        trainer = import_trainer()
+        torch = importlib.import_module("torch")
+
+        model = trainer.HexDirectionalCnnPolicyValueNet(hidden_size=16, cnn_layers=2)
+        features = torch.zeros((3, trainer.FEATURE_COUNT), dtype=torch.float32)
+
+        policy_logits, value = model(features)
+
+        self.assertEqual(tuple(policy_logits.shape), (3, trainer.ACTION_COUNT))
+        self.assertEqual(tuple(value.shape), (3,))
+
+    def test_directional_cnn_claim_gather_matches_grid_to_cell_matrix(self) -> None:
+        trainer = import_trainer()
+        torch = importlib.import_module("torch")
+
+        model = trainer.HexDirectionalCnnPolicyValueNet(hidden_size=16, cnn_layers=1)
+        claim_grid = torch.randn((2, trainer.GRID_CELL_COUNT), dtype=torch.float32)
+
+        gathered = claim_grid.index_select(1, model.cell_grid_indices)
+        matrix_readout = torch.matmul(claim_grid, model.grid_to_cell)
+
+        self.assertTrue(torch.equal(gathered, matrix_readout))
+
     def test_build_model_from_metadata_defaults_old_checkpoints_to_mlp(self) -> None:
         trainer = import_trainer()
 
         model = trainer.build_model_from_metadata({"hidden_size": 16})
 
         self.assertIsInstance(model, trainer.PolicyValueNet)
+
+    def test_build_model_from_metadata_accepts_directional_cnn_architecture(self) -> None:
+        trainer = import_trainer()
+
+        directional = trainer.build_model_from_metadata({
+            "architecture": trainer.DIRECTIONAL_CNN_ARCHITECTURE,
+            "hidden_size": 16,
+            "cnn_layers": 2,
+        })
+
+        self.assertIsInstance(directional, trainer.HexDirectionalCnnPolicyValueNet)
 
     def test_normalize_state_dict_accepts_old_gnn_policy_piece_names(self) -> None:
         trainer = import_trainer()
