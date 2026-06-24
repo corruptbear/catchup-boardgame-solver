@@ -243,7 +243,9 @@ int main(int argc, char** argv) {
             PuctNode* root = mcts.search(state);
             print_result(root, simulations, engine, &config);
         } else if (engine == "neural-puct") {
-            NeuralEvaluator evaluator(require_arg(args, "model"));
+            NeuralEvaluator evaluator(
+                require_arg(args, "model"),
+                parse_neural_device(arg_or_default(args, "neural-device", "mps")));
             NeuralPuctMcts mcts(simulations, seed, evaluator);
             PuctNode* root = mcts.search(state);
             print_result(root, simulations, engine);

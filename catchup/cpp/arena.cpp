@@ -413,11 +413,16 @@ ArenaNeuralEvaluators make_neural_evaluators(
     const AgentSpec& agent_a,
     const AgentSpec& agent_b,
     int batch_size,
-    double wait_ms) {
+    double wait_ms,
+    NeuralDevice device) {
     ArenaNeuralEvaluators evaluators;
     if (agent_a.engine == Engine::NeuralPuct) {
         evaluators.agent_a_storage =
-            std::make_unique<BatchedNeuralEvaluator>(agent_a.model_path, batch_size, wait_ms);
+            std::make_unique<BatchedNeuralEvaluator>(
+                agent_a.model_path,
+                batch_size,
+                wait_ms,
+                device);
         evaluators.agent_a = evaluators.agent_a_storage.get();
     }
     if (agent_b.engine == Engine::NeuralPuct) {
@@ -425,7 +430,11 @@ ArenaNeuralEvaluators make_neural_evaluators(
             evaluators.agent_b = evaluators.agent_a;
         } else {
             evaluators.agent_b_storage =
-                std::make_unique<BatchedNeuralEvaluator>(agent_b.model_path, batch_size, wait_ms);
+                std::make_unique<BatchedNeuralEvaluator>(
+                    agent_b.model_path,
+                    batch_size,
+                    wait_ms,
+                    device);
             evaluators.agent_b = evaluators.agent_b_storage.get();
         }
     }
@@ -441,6 +450,7 @@ std::vector<GameRecord> run_arena(
     int threads,
     int neural_batch_size,
     double neural_batch_wait_ms,
+    NeuralDevice neural_device,
     ActionSelectionByAgent action_selection) {
     int worker_count = effective_thread_count(pairs, threads);
     std::vector<GameRecord> records(static_cast<std::size_t>(pairs) * 2);
@@ -448,7 +458,8 @@ std::vector<GameRecord> run_arena(
         agent_a,
         agent_b,
         neural_batch_size,
-        neural_batch_wait_ms);
+        neural_batch_wait_ms,
+        neural_device);
     std::exception_ptr first_exception;
     std::mutex exception_mutex;
     std::vector<std::thread> workers;
@@ -584,11 +595,13 @@ void print_text_report(
     int pairs,
     int threads,
     std::uint64_t seed,
+    NeuralDevice neural_device,
     ActionSelectionByAgent action_selection,
     const Summary& summary) {
     std::cout << "Arena: A=" << agent_a.label << " vs B=" << agent_b.label << "\n";
     std::cout << "Pairs: " << pairs << "  Games: " << summary.games
               << "  Threads: " << threads << "  Seed: " << seed
+              << "  Neural device: " << neural_device_label(neural_device)
               << "  Action selection: A=" << action_selection_label(action_selection.agent_a)
               << " B=" << action_selection_label(action_selection.agent_b) << "\n";
     std::cout << "Result: A wins " << summary.agent_a_wins
@@ -634,6 +647,7 @@ void print_json_report(
     int pairs,
     int threads,
     std::uint64_t seed,
+    NeuralDevice neural_device,
     ActionSelectionByAgent action_selection,
     const Summary& summary,
     const std::vector<GameRecord>& records) {
@@ -645,6 +659,8 @@ void print_json_report(
     std::cout << ",\"pairs\":" << pairs;
     std::cout << ",\"threads\":" << threads;
     std::cout << ",\"seed\":" << seed;
+    std::cout << ",\"neural_device\":";
+    print_json_string(neural_device_label(neural_device));
     std::cout << ",\"agent_a_action_selection\":";
     print_json_string(action_selection_label(action_selection.agent_a));
     std::cout << ",\"agent_b_action_selection\":";
@@ -740,6 +756,7 @@ int main(int argc, char** argv) {
             std::to_string(std::max(1u, std::thread::hardware_concurrency()))));
         int neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
         double neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "0.5"));
+        NeuralDevice neural_device = parse_neural_device(arg_or_default(args, "neural-device", "mps"));
         if (args.find("action-selection") != args.end()) {
             throw std::runtime_error(
                 "use --agent-a-action-selection and --agent-b-action-selection");
@@ -767,6 +784,7 @@ int main(int argc, char** argv) {
             threads,
             neural_batch_size,
             neural_batch_wait_ms,
+            neural_device,
             action_selection);
         Summary summary = summarize(records);
         if (json) {
@@ -776,11 +794,20 @@ int main(int argc, char** argv) {
                 pairs,
                 worker_count,
                 seed,
+                neural_device,
                 action_selection,
                 summary,
                 records);
         } else {
-            print_text_report(agent_a, agent_b, pairs, worker_count, seed, action_selection, summary);
+            print_text_report(
+                agent_a,
+                agent_b,
+                pairs,
+                worker_count,
+                seed,
+                neural_device,
+                action_selection,
+                summary);
         }
         return 0;
     } catch (const std::exception& exc) {

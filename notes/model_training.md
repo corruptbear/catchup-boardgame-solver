@@ -795,6 +795,29 @@ avg_postprocess_ms   0.027
 this time appeared under output copy because copying tensors back to CPU forced
 the queued MPS work to finish.
 
+CPU AOTI inference was much slower than MPS for the same no-player
+directional-CNN h64 checkpoint and the same 128-game, 100-simulation
+self-play profile:
+
+```text
+model checkpoint data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay.pt
+games            128
+simulations      100
+threads          128
+batch size       128
+wait_ms          0.5
+seed             123
+```
+
+```text
+device  package suffix   real_s  requests  batches  avg_batch  avg_model_ms  avg_aoti_ms  avg_request_ms
+mps     aoti_mps_b128     76.37    604524     5804    104.16        12.30        11.08          12.71
+cpu     aoti_cpu_b128    739.25    607804     5866    103.62       125.24       125.05         125.38
+```
+
+The CPU package did not reduce inference overhead. It was about 9.7x slower in
+wall time, and the batch model call itself was about 10.2x slower.
+
 AOTInductor packages are exported for a fixed input batch size, so the package
 batch size must match the generator's `--neural-batch-size`. For a batch of 32:
 
@@ -1024,15 +1047,16 @@ the five-generation replay model over the bootstrap model.
 Arena checks against heuristic `puct:10000:prior=heuristic:rollout=biased`:
 
 ```text
-generation  search            seed  result  score rate  Blue result  White result
-iter_0006   neural-puct:200      1   10-30       25.0%       6-14          4-16
-iter_0007   neural-puct:400      1   20-20       50.0%       9-11         11-9
-iter_0008   neural-puct:400      1   15-25       37.5%       6-14          9-11
-iter_0008   neural-puct:400      2   14-26       35.0%       7-13          7-13
-iter_0009   neural-puct:400      1   12-28       30.0%       5-15          7-13
+generation  search            seed  games  result  score rate  Blue result  White result
+iter_0006   neural-puct:200      1    128   36-92       28.1%      20-44         16-48
+iter_0007   neural-puct:200      1    128   41-87       32.0%      21-43         20-44
+iter_0007   neural-puct:400      1    128   58-70       45.3%      26-38         32-32
+iter_0008   neural-puct:200      1    128   35-93       27.3%      21-43         14-50
+iter_0008   neural-puct:400      1    128   47-81       36.7%      20-44         27-37
+iter_0009   neural-puct:400      1     40   12-28       30.0%       5-15          7-13
 ```
 
-These 40-game checks suggest the post-`iter_0007` regression is real enough to
+These checks suggest the post-`iter_0007` regression is real enough to
 investigate before continuing the same loop.
 
 100-simulation continuation branch from `iter_0005`:
@@ -1040,7 +1064,7 @@ investigate before continuing the same loop.
 ```text
 data directory  data/neural_self_play_noplayer_npuct100_cont/
 checkpoint tag  npuct100cont
-iter_0006 through iter_0009 all use neural-puct:100 for self-play generation.
+iter_0006 through iter_0014 all use neural-puct:100 for self-play generation.
 ```
 
 Generated shards:
@@ -1051,6 +1075,11 @@ iter_0006    100    32656        317         323      50.078    22.269
 iter_0007    100    32343        335         305      49.598    21.973
 iter_0008    100    32794        306         334      50.264    22.397
 iter_0009    100    32166        321         319      49.438    22.042
+iter_0010    100    32914        294         346      50.542    22.559
+iter_0011    100    32625        330         310      49.944    22.372
+iter_0012    100    32773        309         331      50.217    22.473
+iter_0013    100    32805        330         310      50.147    22.414
+iter_0014    100    32688        311         329      50.072    22.381
 ```
 
 Replay training:
@@ -1061,16 +1090,31 @@ iter_0006             128              65536   10.685  2.6323      2.0087      0
 iter_0007             127              65024   10.458  2.6001      1.9809      0.6192
 iter_0008             129              66048   10.206  2.5470      1.9397      0.6074
 iter_0009             126              64512   11.156  2.5263      1.9319      0.5944
+iter_0010             129              66048   10.990  2.5225      1.9003      0.6223
+iter_0011             128              65536   10.444  2.5256      1.8960      0.6296
+iter_0012             129              66048   11.580  2.4889      1.8719      0.6170
+iter_0013             129              66048   11.031  2.4901      1.8775      0.6126
+iter_0014             128              65536   11.179  2.4776      1.8616      0.6161
 ```
 
 Arena checks against heuristic `puct:10000:prior=heuristic:rollout=biased`:
 
 ```text
-generation  search            seed  result  score rate  Blue result  White result
-iter_0006   neural-puct:100      1    9-31       22.5%       4-16          5-15
-iter_0007   neural-puct:100      1   11-29       27.5%       4-16          7-13
-iter_0008   neural-puct:100      1   16-24       40.0%       8-12          8-12
-iter_0009   neural-puct:100      1    9-31       22.5%       4-16          5-15
+generation  search            seed  games  result  score rate  Blue result  White result
+iter_0006   neural-puct:100      1    128   27-101      21.1%      15-49         12-52
+iter_0006   neural-puct:200      1    128   41-87       32.0%      25-39         16-48
+iter_0006   neural-puct:400      1    128   54-74       42.2%      28-36         26-38
+iter_0006   neural-puct:800      1    128   43-85       33.6%      22-42         21-43
+iter_0007   neural-puct:100      1    128   31-97       24.2%      11-53         20-44
+iter_0007   neural-puct:200      1    128   35-93       27.3%      15-49         20-44
+iter_0007   neural-puct:400      1    128   41-87       32.0%      23-41         18-46
+iter_0007   neural-puct:800      1    128   46-82       35.9%      25-39         21-43
+iter_0008   neural-puct:100      1    128   39-89       30.5%      22-42         17-47
+iter_0008   neural-puct:200      1    128   36-92       28.1%      17-47         19-45
+iter_0008   neural-puct:400      1    128   46-82       35.9%      25-39         21-43
+iter_0008   neural-puct:800      1    128   53-75       41.4%      29-35         24-40
+iter_0009   neural-puct:100      1     40    9-31       22.5%       4-16          5-15
+iter_0014   neural-puct:100      1    128   27-101      21.1%      13-51         14-50
 ```
 
 The 100-simulation branch did not show the same monotonic decline as the
@@ -1094,6 +1138,18 @@ A score rate 35.9% (95% CI 27.6%..44.2%)
 A as Blue  27-37-0
 A as White 19-45-0
 real 280.26s
+
+A = data/models/directional_cnn_h64_noplayer_iter_0014_npuct100cont_replay_aoti_mps_b128.pt2
+B = data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_aoti_mps_b128.pt2
+both search = neural-puct:100
+pairs 64, games 128, threads 64, batch size 128, seed 1
+agent-a-action-selection sample
+agent-b-action-selection sample
+A wins 75, B wins 53, ties 0
+A score rate 58.6% (95% CI 50.1%..67.1%)
+A as Blue  42-22-0
+A as White 33-31-0
+real 264.67s
 ```
 
 Arena checks against `mcts:10000`:
@@ -1199,6 +1255,11 @@ iter_0009             132              67584    [12.29, 15.37, 19.13, 23.65, 29.
 100-cont iter_0007   127              65024    [12.26, 15.32, 18.92, 23.55, 29.95]
 100-cont iter_0008   129              66048    [12.27, 15.48, 18.88, 23.84, 29.53]
 100-cont iter_0009   126              64512    [12.15, 15.26, 18.91, 23.79, 29.89]
+100-cont iter_0010   129              66048    [12.13, 15.51, 19.23, 23.48, 29.64]
+100-cont iter_0011   128              65536    [12.23, 15.18, 18.91, 23.83, 29.84]
+100-cont iter_0012   129              66048    [12.32, 15.42, 19.18, 23.57, 29.52]
+100-cont iter_0013   129              66048    [12.22, 15.32, 19.17, 23.48, 29.81]
+100-cont iter_0014   128              65536    [12.08, 15.55, 18.92, 23.70, 29.74]
 ```
 
 ## Known Gaps

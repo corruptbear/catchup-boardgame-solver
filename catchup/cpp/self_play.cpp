@@ -33,6 +33,7 @@ struct Config {
     TeacherKind teacher = TeacherKind::Puct;
     PuctConfig puct_config;
     std::string model_path;
+    NeuralDevice neural_device = NeuralDevice::Mps;
     int neural_batch_size = 32;
     double neural_batch_wait_ms = 0.5;
     NeuralPuctConfig neural_puct_config;
@@ -128,6 +129,7 @@ Config parse_config(int argc, char** argv) {
         arg_or_default(args, "puct-rollout", "biased"));
     config.neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
     config.neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "0.5"));
+    config.neural_device = parse_neural_device(arg_or_default(args, "neural-device", "mps"));
     config.neural_puct_config.root_noise_epsilon = std::stod(
         arg_or_default(args, "root-noise-epsilon", "0.25"));
     config.neural_puct_config.root_dirichlet_total_concentration = std::stod(
@@ -342,7 +344,8 @@ std::vector<std::vector<Sample>> generate_games(const Config& config) {
         neural_evaluator = std::make_unique<BatchedNeuralEvaluator>(
             config.model_path,
             config.neural_batch_size,
-            config.neural_batch_wait_ms);
+            config.neural_batch_wait_ms,
+            config.neural_device);
     }
     std::vector<std::thread> workers;
     std::mutex error_mutex;
@@ -460,6 +463,7 @@ std::string teacher_label(const Config& config) {
         return "neural-puct:" + std::to_string(config.simulations)
             + ":model=" + config.model_path
             + ":batch=" + std::to_string(config.neural_batch_size)
+            + ":device=" + neural_device_label(config.neural_device)
             + ":root_noise_epsilon=" + std::to_string(
                 config.neural_puct_config.root_noise_epsilon)
             + ":root_dirichlet_total_concentration=" + std::to_string(

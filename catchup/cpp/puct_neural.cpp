@@ -47,6 +47,24 @@ torch::inductor::AOTIModelPackageLoader make_loader(const std::string& package_p
     return torch::inductor::AOTIModelPackageLoader(package_path, "model", false, 1, -1);
 }
 
+}  // namespace
+
+NeuralDevice parse_neural_device(const std::string& text) {
+    if (text == "cpu") {
+        return NeuralDevice::Cpu;
+    }
+    if (text == "mps") {
+        return NeuralDevice::Mps;
+    }
+    throw std::runtime_error("neural device must be cpu or mps");
+}
+
+const char* neural_device_label(NeuralDevice device) {
+    return device == NeuralDevice::Cpu ? "cpu" : "mps";
+}
+
+namespace {
+
 void write_state_features(const TrackedState& state, float* features) {
     std::fill(features, features + kFeatureCount, 0.0F);
     int opponent = other_player(state.current_player);
@@ -78,6 +96,7 @@ std::vector<NeuralEvaluation> run_model_batch(
     torch::inductor::AOTIModelPackageLoader& loader,
     const std::vector<TrackedState>& states,
     int input_rows,
+    NeuralDevice device,
     ModelBatchTiming* timing = nullptr) {
     if (states.empty()) {
         return {};
@@ -109,33 +128,47 @@ std::vector<NeuralEvaluation> run_model_batch(
     Clock::time_point aoti_finished;
     Clock::time_point output_started;
     Clock::time_point output_finished;
-    {
-        std::lock_guard<std::mutex> lock(mps_inference_mutex);
+    auto run_inference = [&]() {
 
         input_started = Clock::now();
         auto input = at::from_blob(
                          features.data(),
                          {input_rows, kFeatureCount},
                          at::TensorOptions().dtype(at::kFloat))
-                         .clone()
-                         .to(at::kMPS);
+                         .clone();
+        if (device == NeuralDevice::Mps) {
+            input = input.to(at::kMPS);
+        }
         input_finished = Clock::now();
 
         aoti_started = Clock::now();
         std::vector<at::Tensor> outputs = loader.run({input});
-        at::detail::getMPSHooks().deviceSynchronize();
+        if (device == NeuralDevice::Mps) {
+            at::detail::getMPSHooks().deviceSynchronize();
+        }
         aoti_finished = Clock::now();
         if (outputs.size() != 2) {
             throw std::runtime_error("neural model must return policy logits and value");
         }
 
         output_started = Clock::now();
-        policy = outputs[0].to(at::kCPU).contiguous();
-        value_tensor = outputs[1].to(at::kCPU).contiguous();
+        if (device == NeuralDevice::Mps) {
+            policy = outputs[0].to(at::kCPU).contiguous();
+            value_tensor = outputs[1].to(at::kCPU).contiguous();
+        } else {
+            policy = outputs[0].contiguous();
+            value_tensor = outputs[1].contiguous();
+        }
         if (policy.size(0) < input_rows || value_tensor.size(0) < input_rows) {
             throw std::runtime_error("neural model returned fewer rows than the configured batch size");
         }
         output_finished = Clock::now();
+    };
+    if (device == NeuralDevice::Mps) {
+        std::lock_guard<std::mutex> lock(mps_inference_mutex);
+        run_inference();
+    } else {
+        run_inference();
     }
 
     auto postprocess_started = Clock::now();
@@ -193,19 +226,21 @@ std::vector<NeuralEvaluation> run_model_batch(
 }  // namespace
 
 struct NeuralEvaluator::Impl {
-    explicit Impl(const std::string& package_path)
-        : loader(make_loader(package_path)) {}
+    Impl(const std::string& package_path, NeuralDevice requested_device)
+        : loader(make_loader(package_path)),
+          device(requested_device) {}
 
     torch::inductor::AOTIModelPackageLoader loader;
+    NeuralDevice device;
 };
 
-NeuralEvaluator::NeuralEvaluator(const std::string& package_path)
-    : impl_(std::make_unique<Impl>(package_path)) {}
+NeuralEvaluator::NeuralEvaluator(const std::string& package_path, NeuralDevice device)
+    : impl_(std::make_unique<Impl>(package_path, device)) {}
 
 NeuralEvaluator::~NeuralEvaluator() = default;
 
 NeuralEvaluation NeuralEvaluator::evaluate(const TrackedState& state) {
-    return run_model_batch(impl_->loader, {state}, 1).front();
+    return run_model_batch(impl_->loader, {state}, 1, impl_->device).front();
 }
 
 struct BatchedNeuralEvaluator::Impl {
@@ -219,10 +254,15 @@ struct BatchedNeuralEvaluator::Impl {
         std::promise<NeuralEvaluation> result;
     };
 
-    Impl(const std::string& package_path, int requested_batch_size, double requested_wait_ms)
+    Impl(
+        const std::string& package_path,
+        int requested_batch_size,
+        double requested_wait_ms,
+        NeuralDevice requested_device)
         : loader(make_loader(package_path)),
           batch_size(requested_batch_size),
           wait_ms(requested_wait_ms),
+          device(requested_device),
           worker(&Impl::run, this) {
         if (batch_size <= 0) {
             throw std::runtime_error("neural batch size must be positive");
@@ -288,7 +328,7 @@ struct BatchedNeuralEvaluator::Impl {
 
                 auto model_started = Clock::now();
                 ModelBatchTiming timing;
-                auto evaluations = run_model_batch(loader, states, batch_size, &timing);
+                auto evaluations = run_model_batch(loader, states, batch_size, device, &timing);
                 auto completed_at = Clock::now();
                 model_time_nanoseconds.fetch_add(
                     elapsed_ns(model_started, completed_at),
@@ -361,6 +401,7 @@ struct BatchedNeuralEvaluator::Impl {
     torch::inductor::AOTIModelPackageLoader loader;
     int batch_size;
     double wait_ms;
+    NeuralDevice device;
     std::atomic<std::uint64_t> request_count{0};
     std::atomic<std::uint64_t> batch_count{0};
     std::atomic<std::uint64_t> batch_item_count{0};
@@ -385,8 +426,9 @@ struct BatchedNeuralEvaluator::Impl {
 BatchedNeuralEvaluator::BatchedNeuralEvaluator(
     const std::string& package_path,
     int batch_size,
-    double wait_ms)
-    : impl_(std::make_unique<Impl>(package_path, batch_size, wait_ms)) {}
+    double wait_ms,
+    NeuralDevice device)
+    : impl_(std::make_unique<Impl>(package_path, batch_size, wait_ms, device)) {}
 
 BatchedNeuralEvaluator::~BatchedNeuralEvaluator() = default;
 

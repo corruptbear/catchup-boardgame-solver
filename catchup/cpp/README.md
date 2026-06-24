@@ -94,6 +94,7 @@ Arena options:
                  max chooses the highest-visit root child; sample samples by visits
                  default is sample for both agents in neural-puct vs neural-puct,
                  max for both agents otherwise
+--neural-device cpu|mps   device for neural AOTI inference; default mps
 --neural-batch-size N     fixed neural eval batch size; default 32
 --neural-batch-wait-ms N  max wait to gather a neural batch; default 0.5
 --json           print full JSON records instead of the text summary
@@ -144,6 +145,7 @@ Options:
 --out PATH                JSONL output path
 --teacher MODE            puct or neural-puct; default puct
 --model PATH              AOTInductor package for neural-puct teacher
+--neural-device cpu|mps   device for neural AOTI inference; default mps
 --neural-batch-size N     fixed neural eval batch size; default 32
 --neural-batch-wait-ms N  max wait to gather a batch; default 0.5
 --profile-neural-batch 1  print neural batch timing stats to stderr

@@ -10,6 +10,14 @@
 #include <string>
 #include <vector>
 
+enum class NeuralDevice {
+    Cpu,
+    Mps,
+};
+
+NeuralDevice parse_neural_device(const std::string& text);
+const char* neural_device_label(NeuralDevice device);
+
 struct NeuralEvaluation {
     std::array<double, kMaxActions> priors{};
     double value = 0.0;
@@ -49,7 +57,9 @@ public:
 
 class NeuralEvaluator : public NeuralEvaluatorBase {
 public:
-    explicit NeuralEvaluator(const std::string& package_path);
+    explicit NeuralEvaluator(
+        const std::string& package_path,
+        NeuralDevice device = NeuralDevice::Mps);
     ~NeuralEvaluator();
 
     NeuralEvaluator(const NeuralEvaluator&) = delete;
@@ -67,7 +77,8 @@ public:
     BatchedNeuralEvaluator(
         const std::string& package_path,
         int batch_size,
-        double wait_ms);
+        double wait_ms,
+        NeuralDevice device = NeuralDevice::Mps);
     ~BatchedNeuralEvaluator();
 
     BatchedNeuralEvaluator(const BatchedNeuralEvaluator&) = delete;
