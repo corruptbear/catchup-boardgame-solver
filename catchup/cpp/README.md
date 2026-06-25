@@ -163,6 +163,8 @@ Options:
                           epsilon scales by (legal/reference)^power; default 0.5
 --root-noise-empty-power N
                           epsilon also scales by (empty_cells/61)^power; default 1.0
+--visit-temperature-min N
+                          action sampling uses tau=max(N, empty_cells/61); default 0.05
 --puct-prior MODE         flat or heuristic; default heuristic
 --puct-rollout M          flat or biased; default biased
 --max-actions N           abort a game after N internal actions

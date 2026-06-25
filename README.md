@@ -145,6 +145,9 @@ Each JSONL row stores a state snapshot, a 62-action policy target from root
 visit counts, and the final value target from that state's player-to-move
 perspective. It also stores terminal game metadata: winner, final component
 sizes, filled cells, and completed turns.
+The played action is sampled from visit counts with
+`tau = max(0.05, empty_count / 61)` by default; override the floor with
+`--visit-temperature-min N`.
 
 Use `--threads N` to run independent self-play games in parallel. On a 12-core
 machine:

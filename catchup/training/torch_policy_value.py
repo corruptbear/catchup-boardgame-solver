@@ -58,6 +58,8 @@ class TrainConfig:
     gnn_layers: int = 4
     cnn_layers: int = 4
     learning_rate: float = 0.001
+    optimizer: str = "adam"
+    weight_decay: float = 0.0
     value_weight: float = 1.0
     symmetry_copies: int = 3
     seed: int = 1
@@ -499,6 +501,18 @@ def policy_value_loss(
     return policy_loss + value_weight * value_loss, policy_loss, value_loss
 
 
+def make_optimizer(config: TrainConfig, model: nn.Module) -> torch.optim.Optimizer:
+    if config.optimizer == "adam":
+        return torch.optim.Adam(model.parameters(), lr=config.learning_rate)
+    if config.optimizer == "adamw":
+        return torch.optim.AdamW(
+            model.parameters(),
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay,
+        )
+    raise ValueError(f"unknown optimizer: {config.optimizer}")
+
+
 @torch.no_grad()
 def evaluate(
     model: nn.Module,
@@ -576,7 +590,7 @@ def train(config: TrainConfig) -> dict[str, Any]:
         cnn_layers=config.cnn_layers,
     ).to(device)
     load_initial_checkpoint(model, config.init_checkpoint)
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
+    optimizer = make_optimizer(config, model)
     history: list[dict[str, Any]] = []
 
     for epoch in range(1, config.epochs + 1):
@@ -685,7 +699,7 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
         cnn_layers=config.cnn_layers,
     ).to(device)
     load_initial_checkpoint(model, config.init_checkpoint)
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
+    optimizer = make_optimizer(config, model)
 
     generation_counts = [0] * len(generations)
     totals = {
@@ -826,6 +840,8 @@ def save_checkpoint(
         "train_batches": config.train_batches,
         "batch_size": config.batch_size,
         "learning_rate": config.learning_rate,
+        "optimizer": config.optimizer,
+        "weight_decay": config.weight_decay,
         "value_weight": config.value_weight,
         "seed": config.seed,
         "device": str(device),
@@ -871,6 +887,8 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
     parser.add_argument("--gnn-layers", type=int, default=TrainConfig.gnn_layers)
     parser.add_argument("--cnn-layers", type=int, default=TrainConfig.cnn_layers)
     parser.add_argument("--learning-rate", type=float, default=TrainConfig.learning_rate)
+    parser.add_argument("--optimizer", choices=("adam", "adamw"), default=TrainConfig.optimizer)
+    parser.add_argument("--weight-decay", type=float, default=TrainConfig.weight_decay)
     parser.add_argument("--value-weight", type=float, default=TrainConfig.value_weight)
     parser.add_argument("--symmetry-copies", type=int, default=TrainConfig.symmetry_copies)
     parser.add_argument("--seed", type=int, default=TrainConfig.seed)
@@ -899,6 +917,8 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
         gnn_layers=args.gnn_layers,
         cnn_layers=args.cnn_layers,
         learning_rate=args.learning_rate,
+        optimizer=args.optimizer,
+        weight_decay=args.weight_decay,
         value_weight=args.value_weight,
         symmetry_copies=args.symmetry_copies,
         seed=args.seed,

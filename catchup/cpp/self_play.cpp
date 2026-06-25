@@ -3,11 +3,13 @@
 #include "tracked_state.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <random>
@@ -38,6 +40,7 @@ struct Config {
     int neural_batch_size = 32;
     double neural_batch_wait_ms = 0.5;
     NeuralPuctConfig neural_puct_config;
+    double visit_temperature_min = 0.05;
     std::string output_path;
     bool profile_neural_batch = false;
 };
@@ -142,6 +145,8 @@ Config parse_config(int argc, char** argv) {
         arg_or_default(args, "root-noise-action-power", "0.5"));
     config.neural_puct_config.root_noise_empty_power = std::stod(
         arg_or_default(args, "root-noise-empty-power", "1.0"));
+    config.visit_temperature_min = std::stod(
+        arg_or_default(args, "visit-temperature-min", "0.05"));
     config.profile_neural_batch = arg_or_default(args, "profile-neural-batch", "0") != "0";
 
     if (config.games <= 0) {
@@ -177,6 +182,9 @@ Config parse_config(int argc, char** argv) {
     }
     if (config.neural_puct_config.root_noise_empty_power < 0.0) {
         throw std::runtime_error("root-noise-empty-power must be non-negative");
+    }
+    if (config.visit_temperature_min <= 0.0) {
+        throw std::runtime_error("visit-temperature-min must be positive");
     }
     return config;
 }
@@ -272,14 +280,26 @@ std::vector<double> policy_target_from_root(const PuctNode* root) {
     return target;
 }
 
-int sample_action_from_root(const PuctNode* root, std::mt19937_64& rng) {
+double visit_temperature(const TrackedState& state, const Config& config) {
+    double empty_ratio = static_cast<double>(state.empty_count()) / static_cast<double>(kCellCount);
+    return std::max(config.visit_temperature_min, empty_ratio);
+}
+
+int sample_action_from_root(const PuctNode* root, double temperature, std::mt19937_64& rng) {
     std::vector<int> actions;
-    std::vector<int> weights;
+    std::vector<double> weights;
     actions.reserve(root->children.size());
     weights.reserve(root->children.size());
+
+    double max_log_weight = -std::numeric_limits<double>::infinity();
     for (const auto& edge : root->children) {
         actions.push_back(edge.action);
-        weights.push_back(edge.child->visits);
+        double log_weight = std::log(static_cast<double>(edge.child->visits)) / temperature;
+        weights.push_back(log_weight);
+        max_log_weight = std::max(max_log_weight, log_weight);
+    }
+    for (double& weight : weights) {
+        weight = std::exp(weight - max_log_weight);
     }
     std::discrete_distribution<std::size_t> distribution(weights.begin(), weights.end());
     return actions[distribution(rng)];
@@ -313,12 +333,12 @@ std::vector<Sample> play_game(
                 *neural_evaluator,
                 config.neural_puct_config);
             PuctNode* root = search.search(state);
-            action = sample_action_from_root(root, rng);
+            action = sample_action_from_root(root, visit_temperature(state, config), rng);
             policy_target = policy_target_from_root(root);
         } else {
             PuctMcts search(config.simulations, search_seed, config.puct_config);
             PuctNode* root = search.search(state);
-            action = sample_action_from_root(root, rng);
+            action = sample_action_from_root(root, visit_temperature(state, config), rng);
             policy_target = policy_target_from_root(root);
         }
 
@@ -485,11 +505,17 @@ std::string teacher_label(const Config& config) {
             + ":root_noise_action_power=" + std::to_string(
                 config.neural_puct_config.root_noise_action_power)
             + ":root_noise_empty_power=" + std::to_string(
-                config.neural_puct_config.root_noise_empty_power);
+                config.neural_puct_config.root_noise_empty_power)
+            + ":visit_temperature=max("
+            + std::to_string(config.visit_temperature_min)
+            + ",empty_count/61)";
     }
     return "puct:" + std::to_string(config.simulations)
         + ":prior=" + puct_prior_mode_name(config.puct_config.prior)
-        + ":rollout=" + puct_rollout_mode_name(config.puct_config.rollout);
+        + ":rollout=" + puct_rollout_mode_name(config.puct_config.rollout)
+        + ":visit_temperature=max("
+        + std::to_string(config.visit_temperature_min)
+        + ",empty_count/61)";
 }
 
 void write_sample(std::ostream& out, const Sample& sample, const std::string& teacher) {

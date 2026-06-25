@@ -17,6 +17,24 @@ total:       12 symmetries
 This is larger than the 8 symmetries of a square Go board, which has four
 rotations and four reflections.
 
+## No Match-Level Tie On The 61-Cell Board
+
+A match-level tie is impossible on the standard 61-cell board.
+
+Catchup compares the players' sorted group-size vectors. For the final result
+to be a tie, the two vectors would have to be identical. Identical vectors have
+the same sum, so both players would need to own the same total number of cells.
+
+That cannot happen on a full 61-cell board:
+
+```text
+blue cells + white cells = 61
+```
+
+Two equal integers cannot sum to an odd number. So the generic tie-handling code
+is still useful for even-sized boards, tests, or nonstandard positions, but a
+real match-level tie should be unreachable on the normal Catchup board.
+
 ## Claiming More Cells Is Usually Good
 
 A basic observation is that, in most positions, the current player should claim

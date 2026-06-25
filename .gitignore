@@ -9,3 +9,4 @@ data/**/*.json
 data/**/*.jsonl
 *.pt
 *.pt2
+*.safetensors
