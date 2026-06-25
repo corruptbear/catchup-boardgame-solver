@@ -33,6 +33,7 @@ struct Config {
     TeacherKind teacher = TeacherKind::Puct;
     PuctConfig puct_config;
     std::string model_path;
+    NeuralBackend neural_backend = NeuralBackend::Aoti;
     NeuralDevice neural_device = NeuralDevice::Mps;
     int neural_batch_size = 32;
     double neural_batch_wait_ms = 0.5;
@@ -129,6 +130,7 @@ Config parse_config(int argc, char** argv) {
         arg_or_default(args, "puct-rollout", "biased"));
     config.neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
     config.neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "0.5"));
+    config.neural_backend = parse_neural_backend(arg_or_default(args, "neural-backend", "aoti"));
     config.neural_device = parse_neural_device(arg_or_default(args, "neural-device", "mps"));
     config.neural_puct_config.root_noise_epsilon = std::stod(
         arg_or_default(args, "root-noise-epsilon", "0.25"));
@@ -204,9 +206,9 @@ void print_neural_batch_stats(const NeuralBatchStats& stats, double wait_ms) {
     const double average_input_ms = stats.batches == 0
         ? 0.0
         : milliseconds(stats.input_time_ns) / static_cast<double>(stats.batches);
-    const double average_aoti_ms = stats.batches == 0
+    const double average_inference_ms = stats.batches == 0
         ? 0.0
-        : milliseconds(stats.aoti_time_ns) / static_cast<double>(stats.batches);
+        : milliseconds(stats.inference_time_ns) / static_cast<double>(stats.batches);
     const double average_output_ms = stats.batches == 0
         ? 0.0
         : milliseconds(stats.output_time_ns) / static_cast<double>(stats.batches);
@@ -235,8 +237,8 @@ void print_neural_batch_stats(const NeuralBatchStats& stats, double wait_ms) {
               << " avg_feature_ms=" << average_feature_ms
               << " total_input_ms=" << milliseconds(stats.input_time_ns)
               << " avg_input_ms=" << average_input_ms
-              << " total_aoti_ms=" << milliseconds(stats.aoti_time_ns)
-              << " avg_aoti_ms=" << average_aoti_ms
+              << " total_inference_ms=" << milliseconds(stats.inference_time_ns)
+              << " avg_inference_ms=" << average_inference_ms
               << " total_output_ms=" << milliseconds(stats.output_time_ns)
               << " avg_output_ms=" << average_output_ms
               << " total_postprocess_ms=" << milliseconds(stats.postprocess_time_ns)
@@ -341,11 +343,20 @@ std::vector<std::vector<Sample>> generate_games(const Config& config) {
     std::vector<std::vector<Sample>> games(static_cast<std::size_t>(config.games));
     std::unique_ptr<BatchedNeuralEvaluator> neural_evaluator;
     if (config.teacher == TeacherKind::NeuralPuct) {
-        neural_evaluator = std::make_unique<BatchedNeuralEvaluator>(
-            config.model_path,
-            config.neural_batch_size,
-            config.neural_batch_wait_ms,
-            config.neural_device);
+        if (config.neural_backend == NeuralBackend::Mlx) {
+            neural_evaluator = std::make_unique<BatchedNeuralEvaluator>(
+                make_mlx_neural_batch_model(config.model_path, config.neural_batch_size),
+                config.neural_batch_size,
+                config.neural_batch_wait_ms);
+        } else {
+            neural_evaluator = std::make_unique<BatchedNeuralEvaluator>(
+                make_aoti_neural_batch_model(
+                    config.model_path,
+                    config.neural_batch_size,
+                    config.neural_device),
+                config.neural_batch_size,
+                config.neural_batch_wait_ms);
+        }
     }
     std::vector<std::thread> workers;
     std::mutex error_mutex;
@@ -463,6 +474,7 @@ std::string teacher_label(const Config& config) {
         return "neural-puct:" + std::to_string(config.simulations)
             + ":model=" + config.model_path
             + ":batch=" + std::to_string(config.neural_batch_size)
+            + ":backend=" + neural_backend_label(config.neural_backend)
             + ":device=" + neural_device_label(config.neural_device)
             + ":root_noise_epsilon=" + std::to_string(
                 config.neural_puct_config.root_noise_epsilon)

@@ -15,8 +15,15 @@ enum class NeuralDevice {
     Mps,
 };
 
+enum class NeuralBackend {
+    Aoti,
+    Mlx,
+};
+
 NeuralDevice parse_neural_device(const std::string& text);
 const char* neural_device_label(NeuralDevice device);
+NeuralBackend parse_neural_backend(const std::string& text);
+const char* neural_backend_label(NeuralBackend backend);
 
 struct NeuralEvaluation {
     std::array<double, kMaxActions> priors{};
@@ -35,10 +42,18 @@ struct NeuralBatchStats {
     std::uint64_t model_time_ns = 0;
     std::uint64_t feature_time_ns = 0;
     std::uint64_t input_time_ns = 0;
-    std::uint64_t aoti_time_ns = 0;
+    std::uint64_t inference_time_ns = 0;
     std::uint64_t output_time_ns = 0;
     std::uint64_t postprocess_time_ns = 0;
     std::uint64_t request_latency_ns = 0;
+};
+
+struct NeuralBatchTiming {
+    std::uint64_t feature_ns = 0;
+    std::uint64_t input_ns = 0;
+    std::uint64_t inference_ns = 0;
+    std::uint64_t output_ns = 0;
+    std::uint64_t postprocess_ns = 0;
 };
 
 struct NeuralPuctConfig {
@@ -55,11 +70,32 @@ public:
     virtual NeuralEvaluation evaluate(const TrackedState& state) = 0;
 };
 
+class NeuralBatchModel {
+public:
+    virtual ~NeuralBatchModel() = default;
+    virtual std::vector<NeuralEvaluation> evaluate_batch(
+        const std::vector<TrackedState>& states,
+        NeuralBatchTiming* timing) = 0;
+};
+
+std::vector<NeuralEvaluation> build_neural_evaluations(
+    const std::vector<TrackedState>& states,
+    const std::vector<ActionList>& legal_actions,
+    const float* all_logits,
+    const float* values);
+
+std::unique_ptr<NeuralBatchModel> make_aoti_neural_batch_model(
+    const std::string& package_path,
+    int batch_size,
+    NeuralDevice device);
+
+std::unique_ptr<NeuralBatchModel> make_mlx_neural_batch_model(
+    const std::string& weights_path,
+    int batch_size);
+
 class NeuralEvaluator : public NeuralEvaluatorBase {
 public:
-    explicit NeuralEvaluator(
-        const std::string& package_path,
-        NeuralDevice device = NeuralDevice::Mps);
+    explicit NeuralEvaluator(std::unique_ptr<NeuralBatchModel> model);
     ~NeuralEvaluator();
 
     NeuralEvaluator(const NeuralEvaluator&) = delete;
@@ -75,10 +111,9 @@ private:
 class BatchedNeuralEvaluator : public NeuralEvaluatorBase {
 public:
     BatchedNeuralEvaluator(
-        const std::string& package_path,
+        std::unique_ptr<NeuralBatchModel> model,
         int batch_size,
-        double wait_ms,
-        NeuralDevice device = NeuralDevice::Mps);
+        double wait_ms);
     ~BatchedNeuralEvaluator();
 
     BatchedNeuralEvaluator(const BatchedNeuralEvaluator&) = delete;

@@ -786,12 +786,12 @@ Internal timing for the `0.5ms` run, with an explicit MPS synchronization after
 avg_model_ms        13.302
 avg_feature_ms       0.049
 avg_input_ms         0.667
-avg_aoti_ms         12.063
+avg_inference_ms    12.063
 avg_output_ms        0.488
 avg_postprocess_ms   0.027
 ```
 
-`avg_aoti_ms` is the real bottleneck. Without the explicit MPS synchronization,
+`avg_inference_ms` is the real bottleneck. Without the explicit MPS synchronization,
 this time appeared under output copy because copying tensors back to CPU forced
 the queued MPS work to finish.
 
@@ -810,13 +810,74 @@ seed             123
 ```
 
 ```text
-device  package suffix   real_s  requests  batches  avg_batch  avg_model_ms  avg_aoti_ms  avg_request_ms
+device  package suffix   real_s  requests  batches  avg_batch  avg_model_ms  avg_inference_ms  avg_request_ms
 mps     aoti_mps_b128     76.37    604524     5804    104.16        12.30        11.08          12.71
 cpu     aoti_cpu_b128    739.25    607804     5866    103.62       125.24       125.05         125.38
 ```
 
 The CPU package did not reduce inference overhead. It was about 9.7x slower in
 wall time, and the batch model call itself was about 10.2x slower.
+
+MLX is a promising alternative for the directional-CNN inference path. A
+standalone Python MLX port of the no-player h64 directional CNN matched the
+PyTorch checkpoint output closely:
+
+```text
+checkpoint data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay.pt
+max_abs_diff policy ~= 5e-5
+max_abs_diff value  ~= 3e-6
+```
+
+Sequential raw MLX inference timings:
+
+```text
+batch  compiled_eval_mean_ms  compiled_eval_plus_numpy_mean_ms
+32                  2.13                         2.18
+64                  2.69                         3.14
+128                 4.68                         4.46
+256                 8.32                         8.30
+512                14.59                        14.58
+1024               29.53                        28.51
+2048               54.51                        55.12
+```
+
+The batch-128 MLX prototype is about 2.6x faster than the current MPS AOTI
+batch-128 model call. Larger batches improve per-position throughput but add
+latency, so they only help if the evaluator has enough concurrent leaf requests
+to keep those batches full.
+
+Native C++ MLX integration uses the same `neural-puct` search engine with
+`--neural-backend mlx`. The PyTorch checkpoint is converted to safetensors
+because MLX C++ can load named tensor maps directly with `load_safetensors`,
+while `.pt` is a PyTorch/Python checkpoint format.
+
+```sh
+python3.10 -m catchup.training.export_mlx_weights --checkpoint data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay.pt --out data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_mlx.safetensors
+```
+
+End-to-end C++ self-play profile with the native MLX backend:
+
+```text
+model        data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_mlx.safetensors
+games        128
+simulations  100
+threads      128
+batch size   128
+wait_ms      0.5
+seed         123
+```
+
+```text
+backend  real_s  requests  batches  avg_batch  avg_model_ms  avg_inference_ms  avg_request_ms
+aoti-mps  76.37    604524     5804    104.16        12.30             11.08          12.71
+mlx       33.56    607804     5867    103.60         4.94              4.84           5.13
+```
+
+The current native MLX path is about 2.1x faster end-to-end than the AOTI MPS
+path on this benchmark. It is slower than the standalone Python MLX raw forward
+timing, mostly because the C++ self-play profile includes feature construction,
+queueing/request latency, output postprocessing, and the MCTS work around each
+batch.
 
 AOTInductor packages are exported for a fixed input batch size, so the package
 batch size must match the generator's `--neural-batch-size`. For a batch of 32:

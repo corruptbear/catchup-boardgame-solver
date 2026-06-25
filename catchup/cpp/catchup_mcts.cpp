@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -243,10 +244,22 @@ int main(int argc, char** argv) {
             PuctNode* root = mcts.search(state);
             print_result(root, simulations, engine, &config);
         } else if (engine == "neural-puct") {
-            NeuralEvaluator evaluator(
-                require_arg(args, "model"),
-                parse_neural_device(arg_or_default(args, "neural-device", "mps")));
-            NeuralPuctMcts mcts(simulations, seed, evaluator);
+            NeuralBackend backend =
+                parse_neural_backend(arg_or_default(args, "neural-backend", "aoti"));
+            int neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "1"));
+            std::unique_ptr<NeuralEvaluatorBase> evaluator;
+            if (backend == NeuralBackend::Mlx) {
+                evaluator = std::make_unique<NeuralEvaluator>(
+                    make_mlx_neural_batch_model(require_arg(args, "model"), neural_batch_size));
+            } else {
+                NeuralDevice device = parse_neural_device(arg_or_default(args, "neural-device", "mps"));
+                evaluator = std::make_unique<NeuralEvaluator>(
+                    make_aoti_neural_batch_model(
+                        require_arg(args, "model"),
+                        neural_batch_size,
+                        device));
+            }
+            NeuralPuctMcts mcts(simulations, seed, *evaluator);
             PuctNode* root = mcts.search(state);
             print_result(root, simulations, engine);
         } else {

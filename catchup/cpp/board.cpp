@@ -2,21 +2,19 @@
 
 #include <algorithm>
 #include <unordered_map>
-#include <utility>
 
 Board::Board() {
-    std::vector<std::pair<int, int>> coords;
-    coords.reserve(kCellCount);
     std::unordered_map<std::string, int> index_by_coord;
     constexpr int radius = 4;
 
+    int index = 0;
     for (int r = -radius; r <= radius; ++r) {
         int q_min = std::max(-radius, -r - radius);
         int q_max = std::min(radius, -r + radius);
         for (int q = q_min; q <= q_max; ++q) {
-            int index = static_cast<int>(coords.size());
-            coords.push_back({q, r});
+            coords[index] = {q, r};
             index_by_coord[key(q, r)] = index;
+            ++index;
         }
     }
 

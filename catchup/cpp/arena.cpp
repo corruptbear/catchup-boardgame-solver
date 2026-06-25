@@ -403,38 +403,57 @@ GameRecord play_game(
 }
 
 struct ArenaNeuralEvaluators {
-    std::unique_ptr<BatchedNeuralEvaluator> agent_a_storage;
-    std::unique_ptr<BatchedNeuralEvaluator> agent_b_storage;
+    std::unique_ptr<NeuralEvaluatorBase> agent_a_storage;
+    std::unique_ptr<NeuralEvaluatorBase> agent_b_storage;
     NeuralEvaluatorBase* agent_a = nullptr;
     NeuralEvaluatorBase* agent_b = nullptr;
 };
+
+std::unique_ptr<BatchedNeuralEvaluator> make_batched_neural_evaluator(
+    const std::string& model_path,
+    int batch_size,
+    double wait_ms,
+    NeuralBackend backend,
+    NeuralDevice device) {
+    if (backend == NeuralBackend::Mlx) {
+        return std::make_unique<BatchedNeuralEvaluator>(
+            make_mlx_neural_batch_model(model_path, batch_size),
+            batch_size,
+            wait_ms);
+    }
+    return std::make_unique<BatchedNeuralEvaluator>(
+        make_aoti_neural_batch_model(model_path, batch_size, device),
+        batch_size,
+        wait_ms);
+}
 
 ArenaNeuralEvaluators make_neural_evaluators(
     const AgentSpec& agent_a,
     const AgentSpec& agent_b,
     int batch_size,
     double wait_ms,
+    NeuralBackend backend,
     NeuralDevice device) {
     ArenaNeuralEvaluators evaluators;
     if (agent_a.engine == Engine::NeuralPuct) {
-        evaluators.agent_a_storage =
-            std::make_unique<BatchedNeuralEvaluator>(
-                agent_a.model_path,
-                batch_size,
-                wait_ms,
-                device);
+        evaluators.agent_a_storage = make_batched_neural_evaluator(
+            agent_a.model_path,
+            batch_size,
+            wait_ms,
+            backend,
+            device);
         evaluators.agent_a = evaluators.agent_a_storage.get();
     }
     if (agent_b.engine == Engine::NeuralPuct) {
         if (agent_a.engine == Engine::NeuralPuct && agent_a.model_path == agent_b.model_path) {
             evaluators.agent_b = evaluators.agent_a;
         } else {
-            evaluators.agent_b_storage =
-                std::make_unique<BatchedNeuralEvaluator>(
-                    agent_b.model_path,
-                    batch_size,
-                    wait_ms,
-                    device);
+            evaluators.agent_b_storage = make_batched_neural_evaluator(
+                agent_b.model_path,
+                batch_size,
+                wait_ms,
+                backend,
+                device);
             evaluators.agent_b = evaluators.agent_b_storage.get();
         }
     }
@@ -450,6 +469,7 @@ std::vector<GameRecord> run_arena(
     int threads,
     int neural_batch_size,
     double neural_batch_wait_ms,
+    NeuralBackend neural_backend,
     NeuralDevice neural_device,
     ActionSelectionByAgent action_selection) {
     int worker_count = effective_thread_count(pairs, threads);
@@ -459,6 +479,7 @@ std::vector<GameRecord> run_arena(
         agent_b,
         neural_batch_size,
         neural_batch_wait_ms,
+        neural_backend,
         neural_device);
     std::exception_ptr first_exception;
     std::mutex exception_mutex;
@@ -595,12 +616,14 @@ void print_text_report(
     int pairs,
     int threads,
     std::uint64_t seed,
+    NeuralBackend neural_backend,
     NeuralDevice neural_device,
     ActionSelectionByAgent action_selection,
     const Summary& summary) {
     std::cout << "Arena: A=" << agent_a.label << " vs B=" << agent_b.label << "\n";
     std::cout << "Pairs: " << pairs << "  Games: " << summary.games
               << "  Threads: " << threads << "  Seed: " << seed
+              << "  Neural backend: " << neural_backend_label(neural_backend)
               << "  Neural device: " << neural_device_label(neural_device)
               << "  Action selection: A=" << action_selection_label(action_selection.agent_a)
               << " B=" << action_selection_label(action_selection.agent_b) << "\n";
@@ -647,6 +670,7 @@ void print_json_report(
     int pairs,
     int threads,
     std::uint64_t seed,
+    NeuralBackend neural_backend,
     NeuralDevice neural_device,
     ActionSelectionByAgent action_selection,
     const Summary& summary,
@@ -659,6 +683,8 @@ void print_json_report(
     std::cout << ",\"pairs\":" << pairs;
     std::cout << ",\"threads\":" << threads;
     std::cout << ",\"seed\":" << seed;
+    std::cout << ",\"neural_backend\":";
+    print_json_string(neural_backend_label(neural_backend));
     std::cout << ",\"neural_device\":";
     print_json_string(neural_device_label(neural_device));
     std::cout << ",\"agent_a_action_selection\":";
@@ -756,6 +782,7 @@ int main(int argc, char** argv) {
             std::to_string(std::max(1u, std::thread::hardware_concurrency()))));
         int neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "32"));
         double neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "0.5"));
+        NeuralBackend neural_backend = parse_neural_backend(arg_or_default(args, "neural-backend", "aoti"));
         NeuralDevice neural_device = parse_neural_device(arg_or_default(args, "neural-device", "mps"));
         if (args.find("action-selection") != args.end()) {
             throw std::runtime_error(
@@ -784,6 +811,7 @@ int main(int argc, char** argv) {
             threads,
             neural_batch_size,
             neural_batch_wait_ms,
+            neural_backend,
             neural_device,
             action_selection);
         Summary summary = summarize(records);
@@ -794,6 +822,7 @@ int main(int argc, char** argv) {
                 pairs,
                 worker_count,
                 seed,
+                neural_backend,
                 neural_device,
                 action_selection,
                 summary,
@@ -805,6 +834,7 @@ int main(int argc, char** argv) {
                 pairs,
                 worker_count,
                 seed,
+                neural_backend,
                 neural_device,
                 action_selection,
                 summary);

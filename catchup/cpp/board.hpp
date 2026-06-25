@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 using Action = std::uint8_t;
@@ -18,6 +19,7 @@ constexpr Action kFinish = kCellCount;
 constexpr int kEarlyWinCheckMinFilledCells = 30;
 
 struct Board {
+    std::array<std::pair<int, int>, kCellCount> coords;
     std::array<std::vector<int>, kCellCount> neighbors;
 
     Board();

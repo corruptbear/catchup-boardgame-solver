@@ -99,6 +99,8 @@ Arena options:
                  max chooses the highest-visit root child; sample samples by visits
                  default is sample for both agents in neural-puct vs neural-puct,
                  max for both agents otherwise
+--neural-backend aoti|mlx
+                 neural evaluator backend; default aoti
 --neural-device cpu|mps   device for neural AOTI inference; default mps
 --neural-batch-size N     fixed neural eval batch size; default 32
 --neural-batch-wait-ms N  max wait to gather a neural batch; default 0.5
@@ -113,12 +115,14 @@ puct:N:prior=flat:rollout=flat             PUCT with flat prior and uniform roll
 puct:N:prior=flat:rollout=biased           PUCT with flat prior and heuristic-biased rollout
 puct:N:prior=heuristic:rollout=flat        PUCT with heuristic prior and uniform rollout
 puct:N:prior=heuristic:rollout=biased      PUCT with heuristic prior and heuristic-biased rollout
-neural-puct:N:MODEL.pt2                    neural PUCT using an AOTInductor package
+neural-puct:N:MODEL                        neural PUCT using AOTI .pt2 or MLX .safetensors
 ```
 
 When either arena agent is `neural-puct`, the arena shares a batched evaluator
-across game worker threads. The model package must be exported for the same
-batch size passed with `--neural-batch-size`.
+across game worker threads. With `--neural-backend aoti`, the model package
+must be exported for the same batch size passed with `--neural-batch-size`.
+With `--neural-backend mlx`, use an MLX safetensors weight file converted from
+the PyTorch checkpoint.
 
 Use `--json` to emit the full game records and summary as JSON.
 
@@ -204,6 +208,12 @@ For batched neural arena or self-play, export a fixed-batch package:
 python3.10 -m catchup.training.export_aoti --checkpoint data/models/gnn_policy_value_30shards_3sym_20ep.pt --exported-program data/models/gnn_policy_value_30shards_3sym_20ep_exported_b32.pt2 --package data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --device mps --batch-size 32
 ```
 
+For the native MLX backend, convert the PyTorch checkpoint to safetensors:
+
+```sh
+python3.10 -m catchup.training.export_mlx_weights --checkpoint data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay.pt --out data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_mlx.safetensors
+```
+
 Then generate neural-PUCT self-play with multiple game workers sharing one
 batched evaluator. Neural self-play mixes Dirichlet noise into the root priors
 of each search by default. The per-action alpha is based on the current legal
@@ -212,6 +222,12 @@ remain:
 
 ```sh
 catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --out data/neural_self_play_smoke.jsonl
+```
+
+Use the MLX backend with batch 128:
+
+```sh
+catchup/cpp/build/catchup_self_play --teacher neural-puct --neural-backend mlx --model data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_mlx.safetensors --games 50 --simulations 100 --threads 50 --neural-batch-size 128 --out data/neural_self_play_mlx_smoke.jsonl
 ```
 
 Run the C++ neural PUCT arena agent:
