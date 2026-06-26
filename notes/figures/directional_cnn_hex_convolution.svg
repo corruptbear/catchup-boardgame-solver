@@ -186,7 +186,7 @@
 
   <g transform="translate(70 675)">
     <rect x="0" y="0" width="170" height="94" rx="8" class="box-gray"/>
-    <text x="17" y="28" class="label">311 features</text>
+    <text x="17" y="28" class="label">310 features</text>
     <text x="17" y="52" class="code">4 cell flags x 61</text>
     <text x="17" y="72" class="code">+ legal + scalars</text>
 
@@ -197,12 +197,12 @@
 
     <rect x="480" y="0" width="190" height="94" rx="8" class="box-green"/>
     <text x="497" y="28" class="label">broadcast globals</text>
-    <text x="497" y="52" class="code">5 scalars + finish</text>
+    <text x="497" y="52" class="code">4 scalars + finish</text>
     <text x="497" y="72" class="code">-> 6 x 9 x 9</text>
 
     <rect x="730" y="0" width="170" height="94" rx="8" class="box-blue"/>
     <text x="747" y="28" class="label">input_projection</text>
-    <text x="747" y="52" class="code">1x1: 11 -> H</text>
+    <text x="747" y="52" class="code">1x1: 10 -> H</text>
     <text x="747" y="72" class="code">mask invalid</text>
 
     <rect x="960" y="0" width="170" height="94" rx="8" class="box-amber"/>

@@ -31,9 +31,71 @@ That cannot happen on a full 61-cell board:
 blue cells + white cells = 61
 ```
 
-Two equal integers cannot sum to an odd number. So the generic tie-handling code
-is still useful for even-sized boards, tests, or nonstandard positions, but a
-real match-level tie should be unreachable on the normal Catchup board.
+Two equal integers cannot sum to an odd number. The engine therefore treats a
+terminal state with equal component vectors as an invalid state, not as a draw.
+
+## Largest Component-Size Margins
+
+Catchup compares each player's sorted connected-component sizes
+lexicographically. In this section, the margin means the size difference at the
+first component where the two vectors differ. If one player has no component at
+that index, the missing component has size 0.
+
+These examples discuss full-board component vectors. The implementation may
+stop some games earlier when reachable-region bounds already prove the winner.
+
+### Largest Group Decides
+
+The biggest legal full-board margin is 40:
+
+```text
+winner groups: (41,)
+loser groups:  (1, 1, ..., 1)  # 20 singleton groups
+margin:        41 - 1 = 40
+```
+
+The winner cannot own more than 41 cells in a legal full-board completion: the
+first player claims 1 cell on the opening turn, and after that can receive 20
+two-cell turns while the opponent claims 1 cell on each intervening turn.
+The bound is attainable because the opponent can occupy 20 non-adjacent cells,
+leaving the winner's other 41 cells connected.
+
+### Second-Largest Group Decides
+
+The biggest margin is 20:
+
+```text
+winner groups: (20, 20, 1)
+loser groups:  (20)
+margin:        20 - 0 = 20
+```
+
+The first groups tie at 20, then the winner's second group beats the opponent's
+missing second group. The upper bound is `3m <= 61`: to decide by the second
+group with margin `m`, the board must contain at least two winner groups of
+size `m` and one loser group of size `m`. Thus `m <= floor(61 / 3) = 20`.
+For the legal turn counts, the losing side must claim only 1 cell on each turn:
+after the winner's 1-cell opening, 20 loser turns of 1 cell and 20 winner turns
+of 2 cells fill the board as 20 loser cells and 41 winner cells. The loser's 20
+connected cells can then act as a separator that splits the winner's cells into
+two 20-cell regions plus one extra singleton.
+
+### Third-Largest Group Decides
+
+The biggest margin is 12:
+
+```text
+winner groups: (12, 12, 12, 1)
+loser groups:  (12, 12)
+margin:        12 - 0 = 12
+```
+
+![Coloring with a third-largest-group margin of 12](figures/third_group_margin_12_coloring.png)
+
+The upper bound is `5m <= 61`: to decide by the third group with margin `m`,
+the first two groups must tie, so the board must contain at least three winner
+groups of size `m` and two loser groups of size `m`. Thus `m <= floor(61 / 5) =
+12`. The coloring above attains that bound.
 
 ## Claiming More Cells Is Usually Good
 
@@ -104,7 +166,7 @@ would trigger a strategically bad increase to the global largest group size.
 
 On the 61-cell radius-4 board, there can be at most 21 empty connected regions.
 
-![Layout with 21 isolated empty regions](../output/empty_regions_21.png)
+![Layout with 21 isolated empty regions](figures/empty_regions_21.png)
 
 The empty-region count is exactly bounded by the board graph's maximum
 independent set size. Pick one cell from each empty connected region. No two

@@ -17,7 +17,7 @@ The board is a radius-4 hexagon with row lengths:
 5, 6, 7, 8, 9, 8, 7, 6, 5
 ```
 
-![Catchup board coordinates](../output/catchup_board_coordinates.png)
+![Catchup board coordinates](figures/catchup_board_coordinates.png)
 
 Rows are stored from top to bottom. The row coordinate `r` runs from `-4` to
 `4`.

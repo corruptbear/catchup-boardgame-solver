@@ -175,7 +175,7 @@ simulations.
 architecture=directional-cnn
 ```
 
-![Directional hex convolution](directional_cnn_hex_convolution.svg)
+![Directional hex convolution](figures/directional_cnn_hex_convolution.svg)
 
 The directional CNN tests whether a fixed-board convolution can beat the
 current graph model while preserving the real hex-neighbor directions. It still
