@@ -76,6 +76,44 @@ class TorchPolicyValueTest(unittest.TestCase):
         for actual, expected_value in zip(features[trainer.SCALAR_OFFSET:], expected):
             self.assertAlmostEqual(float(actual), expected_value)
 
+    def test_lexicographic_margin_value_uses_current_player_perspective(self) -> None:
+        trainer = import_trainer()
+        sample = {
+            "state": {"current_player": 0},
+            "terminal": {
+                "blue_group_sizes": [18, 7, 3],
+                "white_group_sizes": [18, 5, 5],
+                "filled_cells": trainer.CELL_COUNT,
+            },
+            "value_target": 1.0,
+        }
+
+        self.assertAlmostEqual(
+            float(trainer.lexicographic_margin_value(sample)),
+            2.0 / trainer.CELL_COUNT,
+        )
+
+        sample["state"]["current_player"] = 1
+        self.assertAlmostEqual(
+            float(trainer.lexicographic_margin_value(sample)),
+            -2.0 / trainer.CELL_COUNT,
+        )
+
+    def test_lexicographic_margin_value_rejects_early_terminal(self) -> None:
+        trainer = import_trainer()
+        sample = {
+            "state": {"current_player": 0},
+            "terminal": {
+                "blue_group_sizes": [21, 4, 2],
+                "white_group_sizes": [18, 7, 3],
+                "filled_cells": 49,
+            },
+            "value_target": 1.0,
+        }
+
+        with self.assertRaisesRegex(ValueError, "full-board terminal"):
+            trainer.lexicographic_margin_value(sample)
+
     def test_build_model_from_metadata_defaults_old_checkpoints_to_mlp(self) -> None:
         trainer = import_trainer()
 
@@ -157,6 +195,8 @@ class TorchPolicyValueTest(unittest.TestCase):
             "0.8",
             "--target-lifetime-coverage",
             "2.0",
+            "--value-target-kind",
+            "lex-margin",
             "--train-batches",
             "26",
         ])
@@ -166,6 +206,7 @@ class TorchPolicyValueTest(unittest.TestCase):
         self.assertEqual(config.replay_window_generations, 5)
         self.assertEqual(config.replay_gamma, 0.8)
         self.assertEqual(config.target_lifetime_coverage, 2.0)
+        self.assertEqual(config.value_target_kind, "lex-margin")
         self.assertEqual(config.train_batches, 26)
 
 

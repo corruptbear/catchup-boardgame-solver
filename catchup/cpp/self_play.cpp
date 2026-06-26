@@ -46,7 +46,7 @@ struct Config {
 };
 
 struct TerminalInfo {
-    std::optional<int> winner;
+    int winner = kPlayerOne;
     std::vector<int> blue_group_sizes;
     std::vector<int> white_group_sizes;
     int filled_cells = 0;
@@ -474,12 +474,7 @@ void write_double_array(std::ostream& out, const std::vector<double>& values) {
 
 void write_terminal(std::ostream& out, const TerminalInfo& terminal) {
     out << "{";
-    out << "\"winner\":";
-    if (terminal.winner.has_value()) {
-        out << terminal.winner.value();
-    } else {
-        out << "null";
-    }
+    out << "\"winner\":" << terminal.winner;
     out << ",\"blue_group_sizes\":";
     write_int_vector(out, terminal.blue_group_sizes);
     out << ",\"white_group_sizes\":";

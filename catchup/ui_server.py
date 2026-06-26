@@ -38,8 +38,7 @@ def state_payload(state: GameState, message: str = "") -> dict[str, Any]:
     legal_actions = ui_legal_actions(state)
     winner = None
     if state.is_terminal():
-        winner_id = state.winner()
-        winner = PLAYER_NAMES[winner_id] if winner_id is not None else "Tie"
+        winner = PLAYER_NAMES[state.winner()]
 
     return {
         "board": {

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <stdexcept>
 
 namespace {
 
@@ -168,7 +169,7 @@ bool TrackedState::is_terminal() const {
     return proven_winner().has_value();
 }
 
-std::optional<int> TrackedState::winner() const {
+int TrackedState::winner() const {
     auto comparison = compare_size_histograms(
         size_histogram[kPlayerOne],
         size_histogram[kPlayerTwo]);
@@ -178,15 +179,11 @@ std::optional<int> TrackedState::winner() const {
     if (comparison < 0) {
         return kPlayerTwo;
     }
-    return std::nullopt;
+    throw std::logic_error("terminal Catchup state has equal component vectors");
 }
 
 int TrackedState::result_for(int player) const {
-    auto winner_value = winner();
-    if (!winner_value.has_value()) {
-        return 0;
-    }
-    return winner_value.value() == player ? 1 : -1;
+    return winner() == player ? 1 : -1;
 }
 
 ActionList TrackedState::legal_actions() const {

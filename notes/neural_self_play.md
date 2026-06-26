@@ -43,7 +43,6 @@ The 62 actions are:
 
 ```text
 +1  the player to move in this saved state eventually won
- 0  tie
 -1  the player to move in this saved state eventually lost
 ```
 

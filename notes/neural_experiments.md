@@ -73,7 +73,7 @@ Use stochastic visit-count sampling for neural-vs-neural checks.
 Arena checks against heuristic `puct:10000:prior=heuristic:rollout=biased`:
 
 ```text
-generation  search            seed  games  result  score rate  Blue result  White result
+generation  arena search        seed  games  result  score rate  Blue result  White result
 iter_0006   neural-puct:200      1    128   36-92       28.1%      20-44         16-48
 iter_0007   neural-puct:200      1    128   41-87       32.0%      21-43         20-44
 iter_0007   neural-puct:400      1    128   58-70       45.3%      26-38         32-32
@@ -86,6 +86,10 @@ These checks suggest the post-`iter_0007` regression is real enough to
 investigate before continuing the same loop.
 
 ## Experiment 2: 100-Simulation Continuation
+
+Increasing the self-play sim count from 100 to higher value since iter_0006 in experiment 1 might lead to self-play data distribution shift, resulting in higher loss.
+
+So in experiment 2 the sim count is kept at 100.
 
 100-simulation continuation branch from `iter_0005`:
 
@@ -113,7 +117,7 @@ iter_0014    100    32688   311    329      50.072    22.381            128     
 Arena checks against heuristic `puct:10000:prior=heuristic:rollout=biased`:
 
 ```text
-generation  search            seed  games  result  score rate  Blue result  White result
+generation  arena search       seed  games  result  score rate  Blue result  White result
 iter_0006   neural-puct:100      1    128   27-101      21.1%      15-49         12-52
 iter_0006   neural-puct:200      1    128   41-87       32.0%      25-39         16-48
 iter_0006   neural-puct:400      1    128   54-74       42.2%      28-36         26-38
@@ -144,8 +148,7 @@ visit-count sampling for both agents when both agents are `neural-puct`.
 
 ## Experiment 3: AdamW npuct200
 
-Status: incomplete in the source note; only setup and the weight-decay reminder
-were recorded.
+Previous experiments suggest that 100 simulations per move might be too low. Also noticed that there was no L2 regularization earlier.
 
 Setup:
 
@@ -160,3 +163,147 @@ neural batch size               128
 
 The AdamW weight decay is optimizer regularization. It is not added to the
 reported training loss.
+
+Replay buffer settings:
+
+```text
+replay window generations       10
+replay gamma                    0.85
+target lifetime coverage        2.0
+training minibatch size         512
+symmetry copies                 3
+replay data glob                data/neural_self_play_noplayer_adamw_npuct200/iter_*.jsonl
+```
+
+Self-play and replay training summary:
+
+```text
+generation  sims  samples  Blue  White  avg filled  avg turns  train batches  train samples  train sec  loss    policy  value
+iter_0001    200    34626   333    307      53.133    24.048             14           7168      1.254  3.2978  2.2718  1.0260
+iter_0002    200    35363   311    329      53.998    23.917             28          14336      2.403  3.1748  2.2526  0.9221
+iter_0003    200    35094   277    363      53.969    24.142             42          21504      3.559  3.1241  2.2410  0.8831
+iter_0004    200    35473   332    308      54.362    24.387             56          28672      4.980  3.1078  2.2184  0.8893
+iter_0005    200    35261   324    316      54.009    23.859             69          35328      5.752  3.0643  2.1916  0.8727
+iter_0006    200    35231   316    324      54.133    23.970             83          42496      7.723  3.0469  2.1744  0.8725
+iter_0007    200    34855   325    315      53.545    24.295             96          49152      8.258  3.0463  2.1731  0.8732
+iter_0008    200    34971   308    332      53.636    24.178            110          56320      9.498  3.0036  2.1572  0.8464
+iter_0009    200    35380   316    324      54.339    24.728            125          64000     11.217  2.9893  2.1484  0.8409
+iter_0010    200    35222   309    331      54.159    24.480            138          70656     11.268  2.9599  2.1211  0.8388
+iter_0011    200    35257   316    324      54.234    24.181            138          70656     11.345  2.9441  2.1067  0.8373
+iter_0012    200    35046   297    343      54.070    24.080            137          70144     11.934  2.9372  2.0950  0.8421
+iter_0013    200    34932   325    315      53.506    24.252            137          70144     12.037  2.9080  2.0744  0.8336
+iter_0014    200    35222   312    328      54.066    24.481            138          70656     11.479  2.9066  2.0670  0.8396
+```
+
+Arena checks against heuristic `puct:10000:prior=heuristic:rollout=biased`:
+
+```text
+generation  search            seed  games  result  score rate  Blue result  White result  real
+bootstrap   neural-puct:200      1    128   75-53       58.6%      36-28         39-25      142.77s
+iter_0006   neural-puct:200      1    128   71-57       55.5%      35-29         36-28      145.93s
+iter_0007   neural-puct:200      1    128   64-64       50.0%      28-36         36-28      149.52s
+iter_0008   neural-puct:200      1    128   74-54       57.8%      30-34         44-20      150.65s
+iter_0009   neural-puct:200      1    128   73-55       57.0%      38-26         35-29      142.05s
+iter_0010   neural-puct:200      1    128   65-63       50.8%      31-33         34-30      145.26s
+iter_0011   neural-puct:200      1    128   76-52       59.4%      43-21         33-31      146.81s
+iter_0012   neural-puct:200      1    128   89-39       69.5%      45-19         44-20      151.96s
+iter_0012   neural-puct:400      1    128   95-33       74.2%      50-14         45-19      195.64s
+iter_0013   neural-puct:200      1    128   88-40       68.8%      43-21         45-19      152.70s
+iter_0014   neural-puct:200      1    128   89-39       69.5%      45-19         44-20      144.40s
+iter_0012   neural-puct:200      2    128   83-45       64.8%      39-25         44-20      145.07s
+iter_0013   neural-puct:200      2    128   81-47       63.3%      39-25         42-22      148.01s
+iter_0014   neural-puct:200      2    128   80-48       62.5%      45-19         35-29      140.82s
+```
+
+The seed-2 rerun reduced the score rates for `iter_0012` through `iter_0014`,
+but all three remained clearly above 50% against the same `puct:10000` opponent.
+
+Direct neural-vs-neural check:
+
+```text
+A model    B model    search           seed  games  A result  A score rate  A Blue  A White  real
+bootstrap  iter_0014  neural-puct:200     1    128   31-97          24.2%   17-47   14-50    193.27s
+bootstrap  iter_0014  neural-puct:200     2    128   42-86          32.8%   22-42   20-44    191.85s
+```
+
+Both agents used visit-count sampling in this neural-vs-neural arena check.
+`iter_0014` was clearly stronger than the bootstrap model in this run.
+
+## Experiment 4: AdamW npuct400
+
+This branch starts again from the AdamW bootstrap model, but uses 400 neural
+PUCT simulations per self-play move. Other settings match Experiment 3.
+
+Setup:
+
+```text
+optimizer                       AdamW
+weight_decay                    1e-4
+self-play search                neural-puct:400
+self-play games per generation  640
+evaluator backend               MLX
+neural batch size               128
+```
+
+Replay buffer settings:
+
+```text
+replay window generations       10
+replay gamma                    0.85
+target lifetime coverage        2.0
+training minibatch size         512
+symmetry copies                 3
+replay data glob                data/neural_self_play_noplayer_adamw_npuct400/iter_*.jsonl
+```
+
+Self-play and replay training summary:
+
+```text
+generation  sims  samples  Blue  White  avg filled  avg turns  train batches  train samples  train sec  loss    policy  value
+iter_0001    400    34954   311    329      53.895    24.358             14           7168      1.414  3.2541  2.2813  0.9728
+iter_0002    400    35169   320    320      53.625    24.705             28          14336      2.664  3.0848  2.1678  0.9169
+iter_0003    400    35382   328    312      54.536    24.422             42          21504      3.863  3.1139  2.1916  0.9223
+iter_0004    400    35701   295    345      55.062    24.372             56          28672      5.444  3.1038  2.1896  0.9141
+iter_0005    400    35904   334    306      55.320    25.053             71          36352      6.117  3.0715  2.1725  0.8990
+iter_0006    400    35799   324    316      55.167    24.959             84          43008      7.274  3.0475  2.1581  0.8894
+iter_0007    400    35898   309    331      55.431    25.127             99          50688      8.372  3.0398  2.1520  0.8878
+iter_0008    400    36121   338    302      55.539    25.378            113          57856      9.183  3.0471  2.1455  0.9016
+iter_0009    400    35414   311    329      54.742    24.925            125          64000     10.310  3.0194  2.1359  0.8834
+iter_0010    400    35701   320    320      55.109    24.977            140          71680     11.071  3.0069  2.1272  0.8797
+iter_0011    400    35828   314    326      55.044    25.409            140          71680     11.090  2.9940  2.1032  0.8908
+iter_0012    400    35779   339    301      55.223    25.072            140          71680     13.053  2.9746  2.0939  0.8807
+```
+
+Saved shard path pattern:
+
+```text
+data/neural_self_play_noplayer_adamw_npuct400/iter_*_directional_h64_noplayer_adamw_wd1e4_npuct400_640g_b128_tau005_gamma085.jsonl
+```
+
+Saved replay checkpoint pattern:
+
+```text
+data/models/directional_cnn_h64_noplayer_adamw_wd1e4_iter_*_npuct400_replay.pt
+data/models/directional_cnn_h64_noplayer_adamw_wd1e4_iter_*_npuct400_replay_mlx.safetensors
+```
+
+Arena checks against heuristic `puct:10000:prior=heuristic:rollout=biased`:
+
+```text
+generation  search            seed  games  result  score rate  Blue result  White result  real
+iter_0006   neural-puct:200      1    128   72-56       56.2%      35-29         37-27      152.09s
+iter_0006   neural-puct:400      1    128   64-64       50.0%      34-30         30-34      196.33s
+iter_0007   neural-puct:200      1    128   67-61       52.3%      31-33         36-28      148.64s
+iter_0007   neural-puct:400      1    128   86-42       67.2%      42-22         44-20      208.35s
+```
+
+Direct neural-vs-neural check:
+
+```text
+A model             B model             search           seed  games  A result  A score rate  A Blue  A White  real
+iter_0007 npuct400  iter_0007 npuct200  neural-puct:400     1    128   64-64          50.0%   32-32   32-32    369.88s
+iter_0012 npuct400  iter_0012 npuct200  neural-puct:200     1    128   60-68          46.9%   28-36   32-32    173.19s
+iter_0012 npuct400  iter_0012 npuct200  neural-puct:400     1    128   54-74          42.2%   29-35   25-39    378.96s
+```
+
+Both agents used visit-count sampling in the direct neural-vs-neural check.

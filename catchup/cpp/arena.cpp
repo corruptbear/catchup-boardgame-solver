@@ -11,7 +11,6 @@
 #include <iterator>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -55,7 +54,7 @@ struct GameRecord {
     std::string white_side;
     std::string winner_side;
     std::string winner_agent;
-    std::optional<int> winner_player;
+    int winner_player = kPlayerOne;
     int completed_turns = 0;
     int internal_actions = 0;
     int filled_cells = 0;
@@ -65,26 +64,21 @@ struct Summary {
     int games = 0;
     int agent_a_wins = 0;
     int agent_b_wins = 0;
-    int ties = 0;
     double agent_a_score_rate = 0.0;
     double ci_low = 0.0;
     double ci_high = 0.0;
     int a_blue_games = 0;
     int a_blue_wins = 0;
     int a_blue_losses = 0;
-    int a_blue_ties = 0;
     int a_white_games = 0;
     int a_white_wins = 0;
     int a_white_losses = 0;
-    int a_white_ties = 0;
     int b_blue_games = 0;
     int b_blue_wins = 0;
     int b_blue_losses = 0;
-    int b_blue_ties = 0;
     int b_white_games = 0;
     int b_white_wins = 0;
     int b_white_losses = 0;
-    int b_white_ties = 0;
     double average_completed_turns = 0.0;
     double average_internal_actions = 0.0;
     double average_filled_cells = 0.0;
@@ -395,7 +389,7 @@ GameRecord play_game(
     if (record.winner_player == kPlayerOne) {
         record.winner_side = blue_side;
         record.winner_agent = blue.label;
-    } else if (record.winner_player == kPlayerTwo) {
+    } else {
         record.winner_side = white_side;
         record.winner_agent = white.label;
     }
@@ -543,19 +537,15 @@ void add_color_result(const GameRecord& record, Summary& summary) {
         ++summary.a_blue_games;
         if (record.winner_side == "A") {
             ++summary.a_blue_wins;
-        } else if (record.winner_side == "B") {
-            ++summary.a_blue_losses;
         } else {
-            ++summary.a_blue_ties;
+            ++summary.a_blue_losses;
         }
     } else {
         ++summary.a_white_games;
         if (record.winner_side == "A") {
             ++summary.a_white_wins;
-        } else if (record.winner_side == "B") {
-            ++summary.a_white_losses;
         } else {
-            ++summary.a_white_ties;
+            ++summary.a_white_losses;
         }
     }
 
@@ -563,19 +553,15 @@ void add_color_result(const GameRecord& record, Summary& summary) {
         ++summary.b_blue_games;
         if (record.winner_side == "B") {
             ++summary.b_blue_wins;
-        } else if (record.winner_side == "A") {
-            ++summary.b_blue_losses;
         } else {
-            ++summary.b_blue_ties;
+            ++summary.b_blue_losses;
         }
     } else {
         ++summary.b_white_games;
         if (record.winner_side == "B") {
             ++summary.b_white_wins;
-        } else if (record.winner_side == "A") {
-            ++summary.b_white_losses;
         } else {
-            ++summary.b_white_ties;
+            ++summary.b_white_losses;
         }
     }
 }
@@ -587,10 +573,8 @@ Summary summarize(const std::vector<GameRecord>& records) {
     for (const auto& record : records) {
         if (record.winner_side == "A") {
             ++summary.agent_a_wins;
-        } else if (record.winner_side == "B") {
-            ++summary.agent_b_wins;
         } else {
-            ++summary.ties;
+            ++summary.agent_b_wins;
         }
         add_color_result(record, summary);
         summary.average_completed_turns += record.completed_turns;
@@ -598,8 +582,7 @@ Summary summarize(const std::vector<GameRecord>& records) {
         summary.average_filled_cells += record.filled_cells;
     }
 
-    double a_score = summary.agent_a_wins + 0.5 * summary.ties;
-    summary.agent_a_score_rate = a_score / summary.games;
+    summary.agent_a_score_rate = static_cast<double>(summary.agent_a_wins) / summary.games;
     double ci_radius = 1.96 * std::sqrt(
         summary.agent_a_score_rate * (1.0 - summary.agent_a_score_rate) / summary.games);
     summary.ci_low = std::max(0.0, summary.agent_a_score_rate - ci_radius);
@@ -628,24 +611,23 @@ void print_text_report(
               << "  Action selection: A=" << action_selection_label(action_selection.agent_a)
               << " B=" << action_selection_label(action_selection.agent_b) << "\n";
     std::cout << "Result: A wins " << summary.agent_a_wins
-              << ", B wins " << summary.agent_b_wins
-              << ", ties " << summary.ties << "\n";
+              << ", B wins " << summary.agent_b_wins << "\n";
     std::cout.setf(std::ios::fixed);
     std::cout.precision(1);
     std::cout << "A score rate: " << summary.agent_a_score_rate * 100.0
               << "% (95% CI " << summary.ci_low * 100.0
               << "%.." << summary.ci_high * 100.0 << "%)\n";
     std::cout << "A as Blue: " << summary.a_blue_wins << "-"
-              << summary.a_blue_losses << "-" << summary.a_blue_ties
+              << summary.a_blue_losses
               << " in " << summary.a_blue_games << " games\n";
     std::cout << "A as White: " << summary.a_white_wins << "-"
-              << summary.a_white_losses << "-" << summary.a_white_ties
+              << summary.a_white_losses
               << " in " << summary.a_white_games << " games\n";
     std::cout << "B as Blue: " << summary.b_blue_wins << "-"
-              << summary.b_blue_losses << "-" << summary.b_blue_ties
+              << summary.b_blue_losses
               << " in " << summary.b_blue_games << " games\n";
     std::cout << "B as White: " << summary.b_white_wins << "-"
-              << summary.b_white_losses << "-" << summary.b_white_ties
+              << summary.b_white_losses
               << " in " << summary.b_white_games << " games\n";
     std::cout << "Averages: " << summary.average_completed_turns << " turns, "
               << summary.average_internal_actions << " internal actions, "
@@ -695,29 +677,24 @@ void print_json_report(
     std::cout << "\"games\":" << summary.games;
     std::cout << ",\"agent_a_wins\":" << summary.agent_a_wins;
     std::cout << ",\"agent_b_wins\":" << summary.agent_b_wins;
-    std::cout << ",\"ties\":" << summary.ties;
     std::cout << ",\"agent_a_score_rate\":" << summary.agent_a_score_rate;
     std::cout << ",\"agent_a_score_ci95\":[" << summary.ci_low << "," << summary.ci_high << "]";
     std::cout << ",\"agent_a_as_blue\":{";
     std::cout << "\"games\":" << summary.a_blue_games;
     std::cout << ",\"wins\":" << summary.a_blue_wins;
-    std::cout << ",\"losses\":" << summary.a_blue_losses;
-    std::cout << ",\"ties\":" << summary.a_blue_ties << "}";
+    std::cout << ",\"losses\":" << summary.a_blue_losses << "}";
     std::cout << ",\"agent_a_as_white\":{";
     std::cout << "\"games\":" << summary.a_white_games;
     std::cout << ",\"wins\":" << summary.a_white_wins;
-    std::cout << ",\"losses\":" << summary.a_white_losses;
-    std::cout << ",\"ties\":" << summary.a_white_ties << "}";
+    std::cout << ",\"losses\":" << summary.a_white_losses << "}";
     std::cout << ",\"agent_b_as_blue\":{";
     std::cout << "\"games\":" << summary.b_blue_games;
     std::cout << ",\"wins\":" << summary.b_blue_wins;
-    std::cout << ",\"losses\":" << summary.b_blue_losses;
-    std::cout << ",\"ties\":" << summary.b_blue_ties << "}";
+    std::cout << ",\"losses\":" << summary.b_blue_losses << "}";
     std::cout << ",\"agent_b_as_white\":{";
     std::cout << "\"games\":" << summary.b_white_games;
     std::cout << ",\"wins\":" << summary.b_white_wins;
-    std::cout << ",\"losses\":" << summary.b_white_losses;
-    std::cout << ",\"ties\":" << summary.b_white_ties << "}";
+    std::cout << ",\"losses\":" << summary.b_white_losses << "}";
     std::cout << ",\"average_completed_turns\":" << summary.average_completed_turns;
     std::cout << ",\"average_internal_actions\":" << summary.average_internal_actions;
     std::cout << ",\"average_filled_cells\":" << summary.average_filled_cells;
@@ -739,23 +716,11 @@ void print_json_report(
         std::cout << ",\"white_side\":";
         print_json_string(record.white_side);
         std::cout << ",\"winner_side\":";
-        if (record.winner_side.empty()) {
-            std::cout << "null";
-        } else {
-            print_json_string(record.winner_side);
-        }
+        print_json_string(record.winner_side);
         std::cout << ",\"winner_agent\":";
-        if (record.winner_agent.empty()) {
-            std::cout << "null";
-        } else {
-            print_json_string(record.winner_agent);
-        }
+        print_json_string(record.winner_agent);
         std::cout << ",\"winner_player\":";
-        if (record.winner_player.has_value()) {
-            std::cout << record.winner_player.value();
-        } else {
-            std::cout << "null";
-        }
+        std::cout << record.winner_player;
         std::cout << ",\"completed_turns\":" << record.completed_turns;
         std::cout << ",\"internal_actions\":" << record.internal_actions;
         std::cout << ",\"filled_cells\":" << record.filled_cells;

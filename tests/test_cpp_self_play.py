@@ -41,14 +41,18 @@ class CppSelfPlayTest(unittest.TestCase):
         self.assertEqual(len(sample["state"]["owners"]), 61)
         self.assertEqual(len(sample["state"]["legal_mask"]), 62)
         self.assertEqual(len(sample["policy_target"]), 62)
-        self.assertIn(sample["value_target"], (-1, 0, 1))
-        self.assertIn(sample["terminal"]["winner"], (0, 1, None))
+        self.assertIn(sample["value_target"], (-1, 1))
+        self.assertIn(sample["terminal"]["winner"], (0, 1))
         self.assertIsInstance(sample["terminal"]["blue_group_sizes"], list)
         self.assertIsInstance(sample["terminal"]["white_group_sizes"], list)
         self.assertGreaterEqual(sample["terminal"]["filled_cells"], 0)
         self.assertLessEqual(sample["terminal"]["filled_cells"], 61)
         self.assertGreaterEqual(sample["terminal"]["completed_turns"], 1)
-        self.assertEqual(sample["meta"]["teacher"], "puct:1:prior=heuristic:rollout=biased")
+        self.assertEqual(
+            sample["meta"]["teacher"],
+            "puct:1:prior=heuristic:rollout=biased:"
+            "visit_temperature=max(0.050000,empty_count/61)",
+        )
 
 
 if __name__ == "__main__":

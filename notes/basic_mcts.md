@@ -253,7 +253,6 @@ The rollout result is:
 ```text
 1   if the queried player won
 -1  if the queried player lost
-0   for tie
 ```
 
 A single random rollout from a newly created non-terminal node is noisy. Basic
@@ -283,7 +282,7 @@ node.total_value += terminal_result_for(node.state.current_player)
 ```
 
 `terminal_result_for(player)` reads the final winner from the rollout terminal
-state and returns `+1` if `player` won, `-1` if `player` lost, and `0` for a tie.
+state and returns `+1` if `player` won and `-1` if `player` lost.
 
 Example: if the terminal state is a Blue win, then the backed-up result is:
 

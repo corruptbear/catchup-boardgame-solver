@@ -88,7 +88,6 @@ class ArenaTest(unittest.TestCase):
 
         self.assertEqual(summary["agent_a_wins"], 1)
         self.assertEqual(summary["agent_b_wins"], 1)
-        self.assertEqual(summary["ties"], 0)
 
     def test_run_arena_uses_paired_colors_when_cpp_is_built(self) -> None:
         if find_cpp_solver() is None:
@@ -107,7 +106,7 @@ class ArenaTest(unittest.TestCase):
         self.assertEqual(report.records[1].blue_side, "B")
         self.assertEqual(report.records[1].white_side, "A")
         self.assertEqual(report.summary["games"], 2)
-        self.assertIn(report.records[0].winner_player, (PLAYER_ONE, PLAYER_TWO, None))
+        self.assertIn(report.records[0].winner_player, (PLAYER_ONE, PLAYER_TWO))
 
 
 if __name__ == "__main__":

@@ -76,7 +76,7 @@ struct TrackedState {
     std::vector<int> reachable_group_bounds(int player) const;
     std::optional<int> proven_winner() const;
     bool is_terminal() const;
-    std::optional<int> winner() const;
+    int winner() const;
     int result_for(int player) const;
     ActionList legal_actions() const;
     void apply_action(int action);

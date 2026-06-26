@@ -79,7 +79,7 @@ class TrainingSelfPlayTest(unittest.TestCase):
 
         payload = terminal_payload(terminal)
 
-        self.assertIn(payload["winner"], (0, 1, None))
+        self.assertIn(payload["winner"], (0, 1))
         self.assertGreater(payload["filled_cells"], 0)
         self.assertGreater(payload["completed_turns"], 0)
         self.assertEqual(
@@ -98,9 +98,9 @@ class TrainingSelfPlayTest(unittest.TestCase):
 
         self.assertTrue(samples)
         for sample in samples:
-            self.assertIn(sample["value_target"], (-1, 0, 1))
+            self.assertIn(sample["value_target"], (-1, 1))
             self.assertEqual(len(sample["policy_target"]), ACTION_COUNT)
-            self.assertIn(sample["terminal"]["winner"], (0, 1, None))
+            self.assertIn(sample["terminal"]["winner"], (0, 1))
             self.assertGreaterEqual(sample["terminal"]["filled_cells"], 0)
             self.assertLessEqual(sample["terminal"]["filled_cells"], 61)
             self.assertGreaterEqual(sample["terminal"]["completed_turns"], 1)

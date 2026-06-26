@@ -124,8 +124,8 @@ class GameState:
             return PLAYER_TWO
         return None
 
-    def winner(self) -> int | None:
-        """Return the winning player for a terminal state, or None for a tie."""
+    def winner(self) -> int:
+        """Return the winning player for a terminal state."""
 
         if not self.is_terminal():
             raise ValueError("winner is only defined for terminal states")
@@ -138,17 +138,14 @@ class GameState:
             return PLAYER_ONE
         if comparison < 0:
             return PLAYER_TWO
-        return None
+        raise RuntimeError("terminal Catchup state has equal component vectors")
 
     def result_for(self, player: int) -> int:
-        """Return 1 for win, -1 for loss, 0 for tie from player's perspective."""
+        """Return 1 for win and -1 for loss from player's perspective."""
 
         if player not in PLAYERS:
             raise ValueError(f"invalid player: {player}")
-        winner = self.winner()
-        if winner is None:
-            return 0
-        return 1 if winner == player else -1
+        return 1 if self.winner() == player else -1
 
     def _finish_turn(self) -> "GameState":
         if not self.selected:

@@ -38,7 +38,7 @@ class RandomPlayerTest(unittest.TestCase):
         )
         if terminal.tracker.empty_count() > 0:
             self.assertIsNotNone(terminal.proven_winner())
-        self.assertIn(terminal.winner(), (0, 1, None))
+        self.assertIn(terminal.winner(), (0, 1))
 
     def test_random_playout_is_reproducible_with_seed(self) -> None:
         first = random_playout(player=RandomPlayer.with_seed(23))
@@ -110,7 +110,7 @@ class RandomPlayerTest(unittest.TestCase):
 
         result = undo_random_playout_result(state, random.Random(31))
 
-        self.assertIn(result.result_for(0), (-1, 0, 1))
+        self.assertIn(result.result_for(0), (-1, 1))
         self.assertEqual(state.tracker.cell_owners, before_cell_owners)
         self.assertEqual(state.tracker.empty_components(), before_empty_components)
         self.assertEqual(state.group_sizes(0), before_blue_sizes)

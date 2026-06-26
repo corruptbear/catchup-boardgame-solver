@@ -63,9 +63,9 @@ class GameRecord:
     white_agent: str
     blue_side: str
     white_side: str
-    winner_side: str | None
-    winner_agent: str | None
-    winner_player: int | None
+    winner_side: str
+    winner_agent: str
+    winner_player: int
     completed_turns: int
     internal_actions: int
     filled_cells: int
@@ -269,12 +269,9 @@ def play_game(
     if winner_player == PLAYER_ONE:
         winner_side = blue_side
         winner_agent = blue_spec.label
-    elif winner_player == PLAYER_TWO:
+    else:
         winner_side = white_side
         winner_agent = white_spec.label
-    else:
-        winner_side = None
-        winner_agent = None
 
     return GameRecord(
         pair_index=pair_index,
@@ -356,9 +353,7 @@ def summarize_records(records: tuple[GameRecord, ...]) -> dict[str, object]:
     games = len(records)
     a_wins = sum(record.winner_side == "A" for record in records)
     b_wins = sum(record.winner_side == "B" for record in records)
-    ties = games - a_wins - b_wins
-    a_score = a_wins + 0.5 * ties
-    a_score_rate = a_score / games
+    a_score_rate = a_wins / games
     ci_radius = 1.96 * math.sqrt(a_score_rate * (1.0 - a_score_rate) / games)
 
     a_blue = [record for record in records if record.blue_side == "A"]
@@ -368,7 +363,6 @@ def summarize_records(records: tuple[GameRecord, ...]) -> dict[str, object]:
         "games": games,
         "agent_a_wins": a_wins,
         "agent_b_wins": b_wins,
-        "ties": ties,
         "agent_a_score_rate": a_score_rate,
         "agent_a_score_ci95": (
             max(0.0, a_score_rate - ci_radius),
@@ -423,8 +417,7 @@ def format_report(report: ArenaReport) -> str:
             (
                 "Result: "
                 f"A wins {summary['agent_a_wins']}, "
-                f"B wins {summary['agent_b_wins']}, "
-                f"ties {summary['ties']}"
+                f"B wins {summary['agent_b_wins']}"
             ),
             (
                 "A score rate: "
@@ -474,13 +467,12 @@ def _color_summary(records: list[GameRecord]) -> dict[str, int]:
         "games": len(records),
         "wins": sum(record.winner_side == "A" for record in records),
         "losses": sum(record.winner_side == "B" for record in records),
-        "ties": sum(record.winner_side is None for record in records),
     }
 
 
 def _format_color_summary(summary: dict[str, int]) -> str:
     return (
-        f"{summary['wins']}-{summary['losses']}-{summary['ties']} "
+        f"{summary['wins']}-{summary['losses']} "
         f"in {summary['games']} games"
     )
 
