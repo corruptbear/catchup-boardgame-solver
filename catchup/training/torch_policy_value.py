@@ -39,8 +39,6 @@ SCALAR_OFFSET = LEGAL_MASK_OFFSET + ACTION_COUNT
 MLP_ARCHITECTURE = "mlp"
 GNN_ARCHITECTURE = "gnn"
 DIRECTIONAL_CNN_ARCHITECTURE = "directional-cnn"
-VALUE_TARGET_RESULT = "result"
-VALUE_TARGET_LEX_MARGIN = "lex-margin"
 GRID_WIDTH = BOARD.radius * 2 + 1
 GRID_CELL_COUNT = GRID_WIDTH * GRID_WIDTH
 
@@ -63,7 +61,6 @@ class TrainConfig:
     optimizer: str = "adam"
     weight_decay: float = 0.0
     value_weight: float = 1.0
-    value_target_kind: str = VALUE_TARGET_RESULT
     symmetry_copies: int = 3
     seed: int = 1
     device: str = "auto"
@@ -360,47 +357,8 @@ def normalize_model_state_dict(state_dict: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def lexicographic_margin_value(sample: dict[str, Any]) -> np.float32:
-    """Return the final decisive group-size margin from current-player perspective."""
-
-    terminal = sample["terminal"]
-    filled_cells = int(terminal.get("filled_cells", CELL_COUNT))
-    if filled_cells != CELL_COUNT:
-        raise ValueError(
-            "lex-margin value target requires a full-board terminal; "
-            f"got filled_cells={filled_cells}"
-        )
-
-    current_player = int(sample["state"]["current_player"])
-    if current_player == PLAYER_ONE:
-        own_sizes = terminal["blue_group_sizes"]
-        opponent_sizes = terminal["white_group_sizes"]
-    else:
-        own_sizes = terminal["white_group_sizes"]
-        opponent_sizes = terminal["blue_group_sizes"]
-
-    size_count = max(len(own_sizes), len(opponent_sizes))
-    for index in range(size_count):
-        own_size = own_sizes[index] if index < len(own_sizes) else 0
-        opponent_size = opponent_sizes[index] if index < len(opponent_sizes) else 0
-        diff = own_size - opponent_size
-        if diff != 0:
-            return np.float32(diff / CELL_COUNT)
-    return np.float32(0.0)
-
-
-def value_target_for_sample(sample: dict[str, Any], value_target_kind: str) -> np.float32:
-    if value_target_kind == VALUE_TARGET_RESULT:
-        return np.float32(sample["value_target"])
-    if value_target_kind == VALUE_TARGET_LEX_MARGIN:
-        return lexicographic_margin_value(sample)
-    raise ValueError(f"unknown value target kind: {value_target_kind}")
-
-
 def sample_to_arrays(
     sample: dict[str, Any],
-    *,
-    value_target_kind: str = VALUE_TARGET_RESULT,
 ) -> tuple[np.ndarray, np.ndarray, np.float32]:
     """Convert one JSONL sample into feature, policy target, and value target."""
 
@@ -438,7 +396,7 @@ def sample_to_arrays(
     return (
         features,
         np.asarray(sample["policy_target"], dtype=np.float32),
-        value_target_for_sample(sample, value_target_kind),
+        np.float32(sample["value_target"]),
     )
 
 
@@ -448,7 +406,6 @@ def materialize_dataset(
     augment_symmetry: bool,
     symmetry_copies: int,
     rng: random.Random,
-    value_target_kind: str,
 ) -> TensorDataset:
     features: list[np.ndarray] = []
     policies: list[np.ndarray] = []
@@ -459,10 +416,7 @@ def materialize_dataset(
         symmetry_copies=symmetry_copies,
         rng=rng,
     ):
-        feature, policy, value = sample_to_arrays(
-            sample,
-            value_target_kind=value_target_kind,
-        )
+        feature, policy, value = sample_to_arrays(sample)
         features.append(feature)
         policies.append(policy)
         values.append(value)
@@ -511,7 +465,6 @@ def sample_replay_batch(
     batch_size: int,
     rng: random.Random,
     augment_symmetry: bool,
-    value_target_kind: str,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[int]]:
     features: list[np.ndarray] = []
     policies: list[np.ndarray] = []
@@ -525,10 +478,7 @@ def sample_replay_batch(
         sample = rng.choice(generation.samples)
         if augment_symmetry and can_augment_with_symmetry(sample):
             sample = transform_sample(sample, rng.choice(SYMMETRIES))
-        feature, policy, value = sample_to_arrays(
-            sample,
-            value_target_kind=value_target_kind,
-        )
+        feature, policy, value = sample_to_arrays(sample)
         features.append(feature)
         policies.append(policy)
         values.append(value)
@@ -639,7 +589,6 @@ def train(config: TrainConfig) -> dict[str, Any]:
         augment_symmetry=False,
         symmetry_copies=1,
         rng=augmentation_rng,
-        value_target_kind=config.value_target_kind,
     )
     model = build_model(
         config.architecture,
@@ -658,7 +607,6 @@ def train(config: TrainConfig) -> dict[str, Any]:
             augment_symmetry=True,
             symmetry_copies=config.symmetry_copies,
             rng=augmentation_rng,
-            value_target_kind=config.value_target_kind,
         )
         loader = DataLoader(
             train_dataset,
@@ -746,7 +694,6 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
             augment_symmetry=False,
             symmetry_copies=1,
             rng=rng,
-            value_target_kind=config.value_target_kind,
         )
         if validation_paths
         else None
@@ -789,7 +736,6 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
             batch_size=config.batch_size,
             rng=rng,
             augment_symmetry=True,
-            value_target_kind=config.value_target_kind,
         )
         features = features.to(device)
         policy_target = policy_target.to(device)
@@ -866,25 +812,19 @@ def target_distribution_paths(config: TrainConfig) -> list[Path]:
 def inspect_value_target_distribution(config: TrainConfig) -> dict[str, Any]:
     paths = target_distribution_paths(config)
     values: list[float] = []
-    invalid = 0
     for sample in iter_training_samples(
         paths,
         augment_symmetry=False,
         symmetry_copies=1,
         rng=random.Random(config.seed),
     ):
-        try:
-            values.append(float(value_target_for_sample(sample, config.value_target_kind)))
-        except ValueError:
-            invalid += 1
+        values.append(float(np.float32(sample["value_target"])))
 
     array = np.asarray(values, dtype=np.float32)
     quantile_points = (0.0, 0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99, 1.0)
     return {
-        "value_target_kind": config.value_target_kind,
         "paths": [str(path) for path in paths],
         "count": int(array.size),
-        "invalid": invalid,
         "negative": int((array < 0).sum()),
         "zero": int((array == 0).sum()),
         "positive": int((array > 0).sum()),
@@ -953,7 +893,6 @@ def save_checkpoint(
         "optimizer": config.optimizer,
         "weight_decay": config.weight_decay,
         "value_weight": config.value_weight,
-        "value_target_kind": config.value_target_kind,
         "seed": config.seed,
         "device": str(device),
         "replay_data_glob": config.replay_data_glob,
@@ -1001,11 +940,6 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
     parser.add_argument("--optimizer", choices=("adam", "adamw"), default=TrainConfig.optimizer)
     parser.add_argument("--weight-decay", type=float, default=TrainConfig.weight_decay)
     parser.add_argument("--value-weight", type=float, default=TrainConfig.value_weight)
-    parser.add_argument(
-        "--value-target-kind",
-        choices=(VALUE_TARGET_RESULT, VALUE_TARGET_LEX_MARGIN),
-        default=TrainConfig.value_target_kind,
-    )
     parser.add_argument("--symmetry-copies", type=int, default=TrainConfig.symmetry_copies)
     parser.add_argument("--seed", type=int, default=TrainConfig.seed)
     parser.add_argument("--device", choices=("auto", "mps", "cpu"), default=TrainConfig.device)
@@ -1041,7 +975,6 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
         optimizer=args.optimizer,
         weight_decay=args.weight_decay,
         value_weight=args.value_weight,
-        value_target_kind=args.value_target_kind,
         symmetry_copies=args.symmetry_copies,
         seed=args.seed,
         device=args.device,
