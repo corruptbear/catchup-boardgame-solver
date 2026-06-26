@@ -39,6 +39,10 @@ SCALAR_OFFSET = LEGAL_MASK_OFFSET + ACTION_COUNT
 MLP_ARCHITECTURE = "mlp"
 GNN_ARCHITECTURE = "gnn"
 DIRECTIONAL_CNN_ARCHITECTURE = "directional-cnn"
+DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE = "directional-cnn-tanh-margin"
+WIN_LOSS_VALUE_TARGET = "win-loss"
+TANH_MARGIN_VALUE_TARGET = "tanh-margin-scale6"
+TANH_MARGIN_SCALE = 6.0
 GRID_WIDTH = BOARD.radius * 2 + 1
 GRID_CELL_COUNT = GRID_WIDTH * GRID_WIDTH
 
@@ -326,9 +330,18 @@ def build_model(
         return PolicyValueNet(hidden_size=hidden_size)
     if architecture == GNN_ARCHITECTURE:
         return GraphPolicyValueNet(hidden_size=hidden_size, gnn_layers=gnn_layers)
-    if architecture == DIRECTIONAL_CNN_ARCHITECTURE:
+    if architecture in (
+        DIRECTIONAL_CNN_ARCHITECTURE,
+        DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE,
+    ):
         return HexDirectionalCnnPolicyValueNet(hidden_size=hidden_size, cnn_layers=cnn_layers)
     raise ValueError(f"unknown architecture: {architecture}")
+
+
+def value_target_kind_for_architecture(architecture: str) -> str:
+    if architecture == DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE:
+        return TANH_MARGIN_VALUE_TARGET
+    return WIN_LOSS_VALUE_TARGET
 
 
 def build_model_from_metadata(metadata: dict[str, Any]) -> nn.Module:
@@ -359,6 +372,8 @@ def normalize_model_state_dict(state_dict: dict[str, Any]) -> dict[str, Any]:
 
 def sample_to_arrays(
     sample: dict[str, Any],
+    *,
+    value_target_kind: str = WIN_LOSS_VALUE_TARGET,
 ) -> tuple[np.ndarray, np.ndarray, np.float32]:
     """Convert one JSONL sample into feature, policy target, and value target."""
 
@@ -396,8 +411,40 @@ def sample_to_arrays(
     return (
         features,
         np.asarray(sample["policy_target"], dtype=np.float32),
-        np.float32(sample["value_target"]),
+        value_target_from_sample(sample, value_target_kind),
     )
+
+
+def value_target_from_sample(
+    sample: dict[str, Any],
+    value_target_kind: str,
+) -> np.float32:
+    if value_target_kind == WIN_LOSS_VALUE_TARGET:
+        return np.float32(sample["value_target"])
+    if value_target_kind == TANH_MARGIN_VALUE_TARGET:
+        return terminal_tanh_margin_value_target(sample)
+    raise ValueError(f"unknown value target kind: {value_target_kind}")
+
+
+def terminal_tanh_margin_value_target(sample: dict[str, Any]) -> np.float32:
+    """Return tanh(raw / 6) from the saved state's current-player perspective."""
+
+    current_player = int(sample["state"]["current_player"])
+    terminal = sample["terminal"]
+    blue_sizes = terminal["blue_group_sizes"]
+    white_sizes = terminal["white_group_sizes"]
+
+    for rank in range(max(len(blue_sizes), len(white_sizes))):
+        blue_size = blue_sizes[rank] if rank < len(blue_sizes) else 0
+        white_size = white_sizes[rank] if rank < len(white_sizes) else 0
+        diff = blue_size - white_size
+        if diff:
+            if current_player == PLAYER_TWO:
+                diff = -diff
+            raw = diff * (0.5 ** rank)
+            return np.float32(math.tanh(raw / TANH_MARGIN_SCALE))
+
+    raise RuntimeError("terminal Catchup sample has equal component vectors")
 
 
 def materialize_dataset(
@@ -406,6 +453,7 @@ def materialize_dataset(
     augment_symmetry: bool,
     symmetry_copies: int,
     rng: random.Random,
+    value_target_kind: str,
 ) -> TensorDataset:
     features: list[np.ndarray] = []
     policies: list[np.ndarray] = []
@@ -416,7 +464,10 @@ def materialize_dataset(
         symmetry_copies=symmetry_copies,
         rng=rng,
     ):
-        feature, policy, value = sample_to_arrays(sample)
+        feature, policy, value = sample_to_arrays(
+            sample,
+            value_target_kind=value_target_kind,
+        )
         features.append(feature)
         policies.append(policy)
         values.append(value)
@@ -465,6 +516,7 @@ def sample_replay_batch(
     batch_size: int,
     rng: random.Random,
     augment_symmetry: bool,
+    value_target_kind: str,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[int]]:
     features: list[np.ndarray] = []
     policies: list[np.ndarray] = []
@@ -478,7 +530,10 @@ def sample_replay_batch(
         sample = rng.choice(generation.samples)
         if augment_symmetry and can_augment_with_symmetry(sample):
             sample = transform_sample(sample, rng.choice(SYMMETRIES))
-        feature, policy, value = sample_to_arrays(sample)
+        feature, policy, value = sample_to_arrays(
+            sample,
+            value_target_kind=value_target_kind,
+        )
         features.append(feature)
         policies.append(policy)
         values.append(value)
@@ -577,11 +632,13 @@ def train(config: TrainConfig) -> dict[str, Any]:
     validation_paths = paths[-config.validation_shards:]
     device = resolve_device(config.device)
     augmentation_rng = random.Random(config.seed)
+    value_target_kind = value_target_kind_for_architecture(config.architecture)
 
     print(json.dumps({
         "device": str(device),
         "train_shards": len(train_paths),
         "validation_shards": len(validation_paths),
+        "value_target_kind": value_target_kind,
     }, sort_keys=True), flush=True)
 
     validation_dataset = materialize_dataset(
@@ -589,6 +646,7 @@ def train(config: TrainConfig) -> dict[str, Any]:
         augment_symmetry=False,
         symmetry_copies=1,
         rng=augmentation_rng,
+        value_target_kind=value_target_kind,
     )
     model = build_model(
         config.architecture,
@@ -607,6 +665,7 @@ def train(config: TrainConfig) -> dict[str, Any]:
             augment_symmetry=True,
             symmetry_copies=config.symmetry_copies,
             rng=augmentation_rng,
+            value_target_kind=value_target_kind,
         )
         loader = DataLoader(
             train_dataset,
@@ -682,6 +741,7 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
     train_batches = replay_train_batches(config, generations)
     device = resolve_device(config.device)
     rng = random.Random(config.seed)
+    value_target_kind = value_target_kind_for_architecture(config.architecture)
 
     validation_paths = (
         [Path(path) for path in sorted(glob.glob(config.validation_data_glob))]
@@ -694,6 +754,7 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
             augment_symmetry=False,
             symmetry_copies=1,
             rng=rng,
+            value_target_kind=value_target_kind,
         )
         if validation_paths
         else None
@@ -726,6 +787,7 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
         "replay_age_weights": weights,
         "train_batches": train_batches,
         "sampled_positions": sampled_positions,
+        "value_target_kind": value_target_kind,
     }, sort_keys=True), flush=True)
 
     model.train()
@@ -736,6 +798,7 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
             batch_size=config.batch_size,
             rng=rng,
             augment_symmetry=True,
+            value_target_kind=value_target_kind,
         )
         features = features.to(device)
         policy_target = policy_target.to(device)
@@ -811,6 +874,7 @@ def target_distribution_paths(config: TrainConfig) -> list[Path]:
 
 def inspect_value_target_distribution(config: TrainConfig) -> dict[str, Any]:
     paths = target_distribution_paths(config)
+    value_target_kind = value_target_kind_for_architecture(config.architecture)
     values: list[float] = []
     for sample in iter_training_samples(
         paths,
@@ -818,12 +882,13 @@ def inspect_value_target_distribution(config: TrainConfig) -> dict[str, Any]:
         symmetry_copies=1,
         rng=random.Random(config.seed),
     ):
-        values.append(float(np.float32(sample["value_target"])))
+        values.append(float(value_target_from_sample(sample, value_target_kind)))
 
     array = np.asarray(values, dtype=np.float32)
     quantile_points = (0.0, 0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99, 1.0)
     return {
         "paths": [str(path) for path in paths],
+        "value_target_kind": value_target_kind,
         "count": int(array.size),
         "negative": int((array < 0).sum()),
         "zero": int((array == 0).sum()),
@@ -879,6 +944,7 @@ def save_checkpoint(
         "input_size": FEATURE_COUNT,
         "hidden_size": config.hidden_size,
         "architecture": config.architecture,
+        "value_target_kind": value_target_kind_for_architecture(config.architecture),
         "gnn_layers": config.gnn_layers,
         "cnn_layers": config.cnn_layers,
         "action_count": ACTION_COUNT,
@@ -931,6 +997,7 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
             MLP_ARCHITECTURE,
             GNN_ARCHITECTURE,
             DIRECTIONAL_CNN_ARCHITECTURE,
+            DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE,
         ),
         default=TrainConfig.architecture,
     )

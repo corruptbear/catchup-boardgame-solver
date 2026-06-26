@@ -1,4 +1,5 @@
 import importlib
+import math
 import unittest
 from pathlib import Path
 
@@ -94,6 +95,86 @@ class TorchPolicyValueTest(unittest.TestCase):
 
         self.assertIsInstance(directional, trainer.HexDirectionalCnnPolicyValueNet)
 
+    def test_build_model_from_metadata_accepts_tanh_margin_directional_cnn(self) -> None:
+        trainer = import_trainer()
+
+        directional = trainer.build_model_from_metadata({
+            "architecture": trainer.DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE,
+            "hidden_size": 16,
+            "cnn_layers": 2,
+        })
+
+        self.assertIsInstance(directional, trainer.HexDirectionalCnnPolicyValueNet)
+
+    def test_tanh_margin_value_target_uses_current_player_perspective(self) -> None:
+        trainer = import_trainer()
+
+        sample = {
+            "state": {
+                "owners": [-1] * trainer.CELL_COUNT,
+                "current_player": 1,
+                "selected_this_turn": [],
+                "claimed_this_turn": 0,
+                "max_claims": 1,
+                "turn_start_largest": 0,
+                "opening_turn": True,
+                "legal_mask": [False] * trainer.ACTION_COUNT,
+            },
+            "policy_target": [0.0] * trainer.ACTION_COUNT,
+            "value_target": 1.0,
+            "terminal": {
+                "winner": 0,
+                "blue_group_sizes": [8],
+                "white_group_sizes": [5, 3],
+                "filled_cells": 61,
+                "completed_turns": 30,
+            },
+        }
+
+        _, _, value = trainer.sample_to_arrays(
+            sample,
+            value_target_kind=trainer.TANH_MARGIN_VALUE_TARGET,
+        )
+
+        self.assertAlmostEqual(
+            float(value),
+            math.tanh(-3.0 / 6.0),
+            places=7,
+        )
+
+    def test_tanh_margin_value_target_discounts_later_deciding_group(self) -> None:
+        trainer = import_trainer()
+
+        sample = {
+            "state": {
+                "owners": [-1] * trainer.CELL_COUNT,
+                "current_player": 0,
+                "selected_this_turn": [],
+                "claimed_this_turn": 0,
+                "max_claims": 1,
+                "turn_start_largest": 0,
+                "opening_turn": True,
+                "legal_mask": [False] * trainer.ACTION_COUNT,
+            },
+            "policy_target": [0.0] * trainer.ACTION_COUNT,
+            "value_target": 1.0,
+            "terminal": {
+                "winner": 0,
+                "blue_group_sizes": [7, 3],
+                "white_group_sizes": [7, 1],
+                "filled_cells": 61,
+                "completed_turns": 30,
+            },
+        }
+
+        value = trainer.terminal_tanh_margin_value_target(sample)
+
+        self.assertAlmostEqual(
+            float(value),
+            math.tanh(1.0 / 6.0),
+            places=7,
+        )
+
     def test_normalize_state_dict_accepts_old_gnn_policy_piece_names(self) -> None:
         trainer = import_trainer()
 
@@ -159,6 +240,8 @@ class TorchPolicyValueTest(unittest.TestCase):
             "2.0",
             "--train-batches",
             "26",
+            "--architecture",
+            "directional-cnn-tanh-margin",
         ])
 
         self.assertEqual(config.replay_data_glob, "data/neural_self_play/iter_*.jsonl")
@@ -167,6 +250,10 @@ class TorchPolicyValueTest(unittest.TestCase):
         self.assertEqual(config.replay_gamma, 0.8)
         self.assertEqual(config.target_lifetime_coverage, 2.0)
         self.assertEqual(config.train_batches, 26)
+        self.assertEqual(
+            config.architecture,
+            trainer.DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE,
+        )
 
 
 if __name__ == "__main__":
