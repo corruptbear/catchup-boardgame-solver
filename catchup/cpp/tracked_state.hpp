@@ -65,6 +65,7 @@ struct TrackedState {
     std::uint8_t max_claims = 1;
     std::uint8_t turn_start_largest = 0;
     bool opening_turn = true;
+    bool early_win_enabled = true;
     std::uint8_t completed_turns = 0;
 
     TrackedState();

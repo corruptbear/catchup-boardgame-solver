@@ -131,13 +131,13 @@ game summary for the completed self-play game.
 Tiny smoke run:
 
 ```sh
-catchup/cpp/build/catchup_self_play --games 2 --simulations 100 --out data/bootstrap_smoke.jsonl
+catchup/cpp/build/catchup_self_play --games 2 --simulations 100 --early-win false --out data/bootstrap_smoke.jsonl
 ```
 
 Parallel run on a 12-core machine:
 
 ```sh
-catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --out data/bootstrap_50g_10k.jsonl
+catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --early-win false --out data/bootstrap_50g_10k.jsonl
 ```
 
 Options:
@@ -165,6 +165,7 @@ Options:
                           epsilon also scales by (empty_cells/61)^power; default 1.0
 --visit-temperature-min N
                           action sampling uses tau=max(N, empty_cells/61); default 0.05
+--early-win true|false    enable reachable-bound early terminal; default true
 --puct-prior MODE         flat or heuristic; default heuristic
 --puct-rollout M          flat or biased; default biased
 --max-actions N           abort a game after N internal actions
@@ -184,7 +185,7 @@ epsilon
 
 ```sh
 python3.10 -m catchup.training.export_aoti --checkpoint data/models/gnn_policy_value_30shards_3sym_20ep.pt --exported-program data/models/gnn_policy_value_30shards_3sym_20ep_exported_b32.pt2 --package data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --device mps --batch-size 32
-catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --out data/neural_self_play_smoke.jsonl
+catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --early-win false --out data/neural_self_play_smoke.jsonl
 ```
 
 For MLX, convert the PyTorch checkpoint to safetensors and use
@@ -192,5 +193,5 @@ For MLX, convert the PyTorch checkpoint to safetensors and use
 
 ```sh
 python3.10 -m catchup.training.export_mlx_weights --checkpoint data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay.pt --out data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_mlx.safetensors
-catchup/cpp/build/catchup_self_play --teacher neural-puct --neural-backend mlx --model data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_mlx.safetensors --games 50 --simulations 100 --threads 50 --neural-batch-size 128 --out data/neural_self_play_mlx_smoke.jsonl
+catchup/cpp/build/catchup_self_play --teacher neural-puct --neural-backend mlx --model data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_mlx.safetensors --games 50 --simulations 100 --threads 50 --neural-batch-size 128 --early-win false --out data/neural_self_play_mlx_smoke.jsonl
 ```

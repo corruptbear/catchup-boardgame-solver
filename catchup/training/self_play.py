@@ -121,12 +121,13 @@ def generate_game_samples(
     puct_prior: str = "heuristic",
     puct_rollout: str = "biased",
     max_actions: int = 512,
+    early_win_enabled: bool = True,
     teacher: Teacher = suggest_with_teacher_puct,
 ) -> list[dict[str, Any]]:
     """Play one teacher self-play game and return completed training samples."""
 
     rng = random.Random(seed)
-    state = GameState.new()
+    state = GameState.new(early_win_enabled=early_win_enabled)
     samples: list[dict[str, Any]] = []
 
     for ply in range(max_actions):
@@ -149,6 +150,7 @@ def generate_game_samples(
                     "action_count": ACTION_COUNT,
                     "finish_action": FINISH,
                     "teacher": f"puct:{simulations}:prior={puct_prior}:rollout={puct_rollout}",
+                    "early_win": early_win_enabled,
                     "game_id": game_id,
                     "ply": ply,
                     "seed": search_seed,
@@ -168,6 +170,7 @@ def generate_samples(
     puct_prior: str = "heuristic",
     puct_rollout: str = "biased",
     max_actions: int = 512,
+    early_win_enabled: bool = True,
     workers: int = 1,
     teacher: Teacher = suggest_with_teacher_puct,
 ) -> list[dict[str, Any]]:
@@ -186,6 +189,7 @@ def generate_samples(
             puct_prior=puct_prior,
             puct_rollout=puct_rollout,
             max_actions=max_actions,
+            early_win_enabled=early_win_enabled,
             workers=workers,
         )
 
@@ -198,6 +202,7 @@ def generate_samples(
                 puct_prior=puct_prior,
                 puct_rollout=puct_rollout,
                 max_actions=max_actions,
+                early_win_enabled=early_win_enabled,
                 teacher=teacher,
             )
         )
@@ -212,6 +217,7 @@ def generate_samples_parallel(
     puct_prior: str,
     puct_rollout: str,
     max_actions: int,
+    early_win_enabled: bool,
     workers: int,
 ) -> list[dict[str, Any]]:
     """Generate samples in several worker processes."""
@@ -229,7 +235,16 @@ def generate_samples_parallel(
         parent_conn, child_conn = context.Pipe(duplex=False)
         process = context.Process(
             target=generate_samples_worker,
-            args=(child_conn, game_ids, simulations, seed, puct_prior, puct_rollout, max_actions),
+            args=(
+                child_conn,
+                game_ids,
+                simulations,
+                seed,
+                puct_prior,
+                puct_rollout,
+                max_actions,
+                early_win_enabled,
+            ),
         )
         process.start()
         child_conn.close()
@@ -277,6 +292,7 @@ def generate_samples_worker(
     puct_prior: str,
     puct_rollout: str,
     max_actions: int,
+    early_win_enabled: bool,
 ) -> None:
     """Generate assigned games and send them back to the parent process."""
 
@@ -293,6 +309,7 @@ def generate_samples_worker(
                         puct_prior=puct_prior,
                         puct_rollout=puct_rollout,
                         max_actions=max_actions,
+                        early_win_enabled=early_win_enabled,
                     ),
                 )
             )
@@ -322,6 +339,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--puct-prior", choices=("flat", "heuristic"), default="heuristic")
     parser.add_argument("--puct-rollout", choices=("flat", "biased"), default="biased")
     parser.add_argument("--max-actions", type=int, default=512)
+    parser.add_argument("--early-win", choices=("true", "false"), default="true")
     parser.add_argument("--workers", type=int, default=1)
     return parser
 
@@ -343,6 +361,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         puct_prior=args.puct_prior,
         puct_rollout=args.puct_rollout,
         max_actions=args.max_actions,
+        early_win_enabled=args.early_win == "true",
         workers=args.workers,
     )
     write_jsonl(samples, args.out)

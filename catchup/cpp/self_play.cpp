@@ -41,6 +41,7 @@ struct Config {
     double neural_batch_wait_ms = 0.5;
     NeuralPuctConfig neural_puct_config;
     double visit_temperature_min = 0.05;
+    bool early_win_enabled = true;
     std::string output_path;
     bool profile_neural_batch = false;
 };
@@ -103,6 +104,16 @@ std::uint64_t random_seed() {
     return high ^ static_cast<std::uint64_t>(device());
 }
 
+bool parse_bool_arg(const std::string& text, const std::string& name) {
+    if (text == "true" || text == "1") {
+        return true;
+    }
+    if (text == "false" || text == "0") {
+        return false;
+    }
+    throw std::runtime_error(name + " must be true or false");
+}
+
 Config parse_config(int argc, char** argv) {
     auto args = parse_args(argc, argv);
     Config config;
@@ -147,6 +158,9 @@ Config parse_config(int argc, char** argv) {
         arg_or_default(args, "root-noise-empty-power", "1.0"));
     config.visit_temperature_min = std::stod(
         arg_or_default(args, "visit-temperature-min", "0.05"));
+    config.early_win_enabled = parse_bool_arg(
+        arg_or_default(args, "early-win", "true"),
+        "early-win");
     config.profile_neural_batch = arg_or_default(args, "profile-neural-batch", "0") != "0";
 
     if (config.games <= 0) {
@@ -310,6 +324,7 @@ std::vector<Sample> play_game(
     int game_id,
     NeuralEvaluatorBase* neural_evaluator) {
     TrackedState state;
+    state.early_win_enabled = config.early_win_enabled;
     std::mt19937_64 rng(config.seed + static_cast<std::uint64_t>(game_id));
     std::vector<Sample> samples;
 
@@ -536,6 +551,7 @@ void write_sample(std::ostream& out, const Sample& sample, const std::string& te
     out << "\"action_count\":" << kMaxActions;
     out << ",\"finish_action\":" << static_cast<int>(kFinish);
     out << ",\"teacher\":\"" << teacher << "\"";
+    out << ",\"early_win\":" << (sample.state.early_win_enabled ? "true" : "false");
     out << ",\"game_id\":" << sample.game_id;
     out << ",\"ply\":" << sample.ply;
     out << ",\"seed\":" << sample.search_seed;

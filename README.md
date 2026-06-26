@@ -137,7 +137,7 @@ make -C catchup/cpp
 Then run a tiny C++ self-play smoke generation:
 
 ```sh
-catchup/cpp/build/catchup_self_play --games 2 --simulations 100 --out data/bootstrap_smoke.jsonl
+catchup/cpp/build/catchup_self_play --games 2 --simulations 100 --early-win false --out data/bootstrap_smoke.jsonl
 ```
 
 The generator uses PUCT with heuristic priors and biased rollouts by default.
@@ -153,14 +153,14 @@ Use `--threads N` to run independent self-play games in parallel. On a 12-core
 machine:
 
 ```sh
-catchup/cpp/build/catchup_self_play --games 12 --simulations 100 --threads 12 --out data/bootstrap_parallel_smoke.jsonl
+catchup/cpp/build/catchup_self_play --games 12 --simulations 100 --threads 12 --early-win false --out data/bootstrap_parallel_smoke.jsonl
 ```
 
 For real bootstrap data, use a larger budget only after the smoke output looks
 right, for example:
 
 ```sh
-catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --out data/bootstrap_50g_10k.jsonl
+catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --early-win false --out data/bootstrap_50g_10k.jsonl
 ```
 
 Normal data generation omits `--seed`, so each run uses fresh randomness.
@@ -224,13 +224,13 @@ move count, and the noise weight decreases as fewer actions and empty cells
 remain:
 
 ```sh
-catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --out data/neural_self_play_smoke.jsonl
+catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --early-win false --out data/neural_self_play_smoke.jsonl
 ```
 
 Use the MLX backend with batch 128:
 
 ```sh
-catchup/cpp/build/catchup_self_play --teacher neural-puct --neural-backend mlx --model data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_mlx.safetensors --games 50 --simulations 100 --threads 50 --neural-batch-size 128 --out data/neural_self_play_mlx_smoke.jsonl
+catchup/cpp/build/catchup_self_play --teacher neural-puct --neural-backend mlx --model data/models/directional_cnn_h64_noplayer_iter_0008_npuct100cont_replay_mlx.safetensors --games 50 --simulations 100 --threads 50 --neural-batch-size 128 --early-win false --out data/neural_self_play_mlx_smoke.jsonl
 ```
 
 Run the C++ neural PUCT arena agent:

@@ -25,7 +25,7 @@ tables belong in `neural_experiments.md`.
 Generate bootstrap data:
 
 ```sh
-catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --out data/bootstrap/shard_0001_50g_10k.jsonl
+catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --early-win false --out data/bootstrap/shard_0001_50g_10k.jsonl
 ```
 
 Train a supervised directional-CNN checkpoint:
@@ -49,7 +49,7 @@ catchup/cpp/build/catchup_arena --agent-a neural-puct:200:data/models/directiona
 Generate neural self-play data:
 
 ```sh
-catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --out data/neural_self_play/example_50g.jsonl
+catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --early-win false --out data/neural_self_play/example_50g.jsonl
 ```
 
 ## Operating Rules

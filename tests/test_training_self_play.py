@@ -105,7 +105,22 @@ class TrainingSelfPlayTest(unittest.TestCase):
             self.assertLessEqual(sample["terminal"]["filled_cells"], 61)
             self.assertGreaterEqual(sample["terminal"]["completed_turns"], 1)
             self.assertEqual(sample["meta"]["teacher"], "puct:2:prior=heuristic:rollout=biased")
+            self.assertTrue(sample["meta"]["early_win"])
             self.assertEqual(sample["meta"]["game_id"], 3)
+
+    def test_generate_game_samples_can_disable_early_win(self) -> None:
+        samples = generate_game_samples(
+            game_id=3,
+            simulations=2,
+            seed=7,
+            max_actions=200,
+            early_win_enabled=False,
+            teacher=first_legal_teacher,
+        )
+
+        self.assertTrue(samples)
+        self.assertFalse(samples[0]["meta"]["early_win"])
+        self.assertEqual(samples[0]["terminal"]["filled_cells"], 61)
 
     def test_generate_samples_rejects_custom_teacher_with_workers(self) -> None:
         with self.assertRaises(ValueError):
@@ -152,17 +167,20 @@ class TrainingSelfPlayTest(unittest.TestCase):
                 "samples.jsonl",
                 "--workers",
                 "12",
+                "--early-win",
+                "false",
             ]
         )
 
         self.assertEqual(args.workers, 12)
+        self.assertEqual(args.early_win, "false")
 
     def test_write_jsonl_writes_one_line_per_sample(self) -> None:
         samples = [
             {
                 "state": state_payload(GameState.new()),
                 "policy_target": [0.0] * ACTION_COUNT,
-                "value_target": 0,
+                "value_target": 1,
                 "terminal": {
                     "winner": 0,
                     "blue_group_sizes": [1],
@@ -181,7 +199,7 @@ class TrainingSelfPlayTest(unittest.TestCase):
             lines = output.read_text(encoding="utf-8").splitlines()
 
         self.assertEqual(len(lines), 1)
-        self.assertIn('"value_target":0', lines[0])
+        self.assertIn('"value_target":1', lines[0])
 
 
 if __name__ == "__main__":

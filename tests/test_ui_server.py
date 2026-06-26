@@ -48,6 +48,35 @@ class UiServerTest(unittest.TestCase):
         reset = session.reset()
         self.assertEqual(reset["finish_action"], FINISH)
         self.assertEqual(reset["empty_count"], 61)
+        self.assertTrue(session._state.early_win_enabled)
+
+    def test_session_suggest_action_uses_early_win_state(self) -> None:
+        original = ui_server.suggest_with_cpp_mcts
+        seen_early_win_flags = []
+
+        def fake_cpp_suggest(
+            state,
+            simulations,
+            seed=1,
+            engine="random",
+            puct_prior=None,
+            puct_rollout=None,
+        ):
+            seen_early_win_flags.append(state.early_win_enabled)
+            return {
+                "action": 0,
+                "choices": [{"action": 0, "visits": simulations, "value": 0.0}],
+                "engine": engine,
+                "state_mode": "tracked",
+            }
+
+        ui_server.suggest_with_cpp_mcts = fake_cpp_suggest
+        try:
+            GameSession().suggest_action(simulations=4)
+        finally:
+            ui_server.suggest_with_cpp_mcts = original
+
+        self.assertEqual(seen_early_win_flags, [True])
 
     def test_session_allows_human_out_of_order_multi_cell_turn(self) -> None:
         session = GameSession()

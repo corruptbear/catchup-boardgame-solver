@@ -97,6 +97,19 @@ class GameStateTest(unittest.TestCase):
         self.assertEqual(state.legal_actions(), ())
         self.assertEqual(state.winner(), PLAYER_ONE)
 
+    def test_early_win_can_be_disabled(self) -> None:
+        cell_owners = [PLAYER_ONE] * BOARD.cell_count
+        cell_owners[0] = PLAYER_TWO
+        cell_owners[1] = EMPTY
+        state = GameState(
+            tracker=ComponentTracker(cell_owners=cell_owners),
+            early_win_enabled=False,
+        )
+
+        self.assertEqual(state.proven_winner(), PLAYER_ONE)
+        self.assertFalse(state.is_terminal())
+        self.assertNotEqual(state.legal_actions(), ())
+
     def test_reachable_bounds_are_skipped_before_minimum_filled_cells(self) -> None:
         cell_owners = [EMPTY] * BOARD.cell_count
         filled_cells = EARLY_WIN_CHECK_MIN_FILLED_CELLS - 1

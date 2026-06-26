@@ -6,11 +6,14 @@ sampling, and exploration controls.
 ## Bootstrap Data
 
 The C++ generator is `catchup/cpp/self_play.cpp`.
+For bootstrap and neural self-play data, pass `--early-win false` so terminal
+metadata comes from a full board. Interactive UI search can keep early wins
+enabled.
 
 Example command:
 
 ```sh
-catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --out data/bootstrap/shard_0001_50g_10k.jsonl
+catchup/cpp/build/catchup_self_play --games 50 --simulations 10000 --threads 12 --early-win false --out data/bootstrap/shard_0001_50g_10k.jsonl
 ```
 
 Normal data generation omits `--seed`, so each run uses fresh randomness. Use
@@ -271,7 +274,7 @@ checkpoint name.
 Generate neural self-play data with:
 
 ```sh
-catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --out data/neural_self_play/example_50g.jsonl
+catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gnn_policy_value_30shards_3sym_20ep_aoti_mps_b32.pt2 --games 50 --simulations 100 --threads 12 --neural-batch-size 32 --early-win false --out data/neural_self_play/example_50g.jsonl
 ```
 
 ### Exploration

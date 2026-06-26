@@ -27,11 +27,16 @@ class GameState:
     max_claims: int = 1
     turn_start_largest: int = 0
     opening_turn: bool = True
+    early_win_enabled: bool = True
     completed_turns: int = 0
 
     @classmethod
-    def new(cls, board: Board = BOARD) -> "GameState":
-        return cls(board=board, tracker=ComponentTracker(board=board))
+    def new(cls, board: Board = BOARD, *, early_win_enabled: bool = True) -> "GameState":
+        return cls(
+            board=board,
+            tracker=ComponentTracker(board=board),
+            early_win_enabled=early_win_enabled,
+        )
 
     def copy(self) -> "GameState":
         return GameState(
@@ -42,6 +47,7 @@ class GameState:
             max_claims=self.max_claims,
             turn_start_largest=self.turn_start_largest,
             opening_turn=self.opening_turn,
+            early_win_enabled=self.early_win_enabled,
             completed_turns=self.completed_turns,
         )
 
@@ -96,6 +102,8 @@ class GameState:
         empty_count = self.tracker.empty_count()
         if empty_count == 0:
             return True
+        if not self.early_win_enabled:
+            return False
         if self.board.cell_count - empty_count < EARLY_WIN_CHECK_MIN_FILLED_CELLS:
             return False
         return self.proven_winner() is not None

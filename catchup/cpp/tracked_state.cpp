@@ -163,6 +163,9 @@ bool TrackedState::is_terminal() const {
     if (empties == 0) {
         return true;
     }
+    if (!early_win_enabled) {
+        return false;
+    }
     if (kCellCount - empties < kEarlyWinCheckMinFilledCells) {
         return false;
     }

@@ -54,6 +54,34 @@ class CppSelfPlayTest(unittest.TestCase):
             "visit_temperature=max(0.050000,empty_count/61)",
         )
 
+    def test_cpp_self_play_can_disable_early_win_when_built(self) -> None:
+        if not CPP_SELF_PLAY.is_file():
+            self.skipTest("C++ self-play binary is not built")
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "samples.jsonl"
+            completed = subprocess.run(
+                [
+                    str(CPP_SELF_PLAY),
+                    "--games",
+                    "1",
+                    "--simulations",
+                    "1",
+                    "--early-win",
+                    "false",
+                    "--out",
+                    str(output_path),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            sample = json.loads(output_path.read_text(encoding="utf-8").splitlines()[0])
+
+        self.assertFalse(sample["meta"]["early_win"])
+        self.assertEqual(sample["terminal"]["filled_cells"], 61)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -68,6 +68,7 @@ class FastRolloutState:
     max_claims: int
     turn_start_largest: int
     opening_turn: bool
+    early_win_enabled: bool
     completed_turns: int
 
     @classmethod
@@ -80,12 +81,13 @@ class FastRolloutState:
             max_claims=state.max_claims,
             turn_start_largest=state.turn_start_largest,
             opening_turn=state.opening_turn,
+            early_win_enabled=state.early_win_enabled,
             completed_turns=state.completed_turns,
         )
 
     @classmethod
-    def new(cls, board: Board = BOARD) -> "FastRolloutState":
-        return cls.from_game_state(GameState.new(board))
+    def new(cls, board: Board = BOARD, *, early_win_enabled: bool = True) -> "FastRolloutState":
+        return cls.from_game_state(GameState.new(board, early_win_enabled=early_win_enabled))
 
     def legal_actions(self) -> tuple[int, ...]:
         if self.is_terminal():
@@ -123,6 +125,8 @@ class FastRolloutState:
         empty_count = self.tracker.empty_count()
         if empty_count == 0:
             return True
+        if not self.early_win_enabled:
+            return False
         if self.board.cell_count - empty_count < EARLY_WIN_CHECK_MIN_FILLED_CELLS:
             return False
         return self.proven_winner() is not None
@@ -465,6 +469,7 @@ def undo_random_playout_result(
         max_claims=state.max_claims,
         turn_start_largest=state.turn_start_largest,
         opening_turn=state.opening_turn,
+        early_win_enabled=state.early_win_enabled,
         completed_turns=state.completed_turns,
     )
     action_rng = rng if rng is not None else random.Random()
