@@ -50,6 +50,30 @@ class TorchPolicyValueTest(unittest.TestCase):
 
         self.assertTrue(torch.equal(gathered, matrix_readout))
 
+    def test_directional_cnn_initializes_output_biases_to_zero(self) -> None:
+        trainer = import_trainer()
+        torch = importlib.import_module("torch")
+
+        torch.manual_seed(1)
+        model = trainer.HexDirectionalCnnPolicyValueNet(hidden_size=16, cnn_layers=1)
+        features = torch.zeros((4, trainer.FEATURE_COUNT), dtype=torch.float32)
+        with torch.no_grad():
+            _, value = model(features)
+
+        self.assertTrue(torch.equal(
+            model.claim_policy_scorer.bias,
+            torch.zeros_like(model.claim_policy_scorer.bias),
+        ))
+        self.assertTrue(torch.equal(
+            model.finish_policy_scorer[-1].bias,
+            torch.zeros_like(model.finish_policy_scorer[-1].bias),
+        ))
+        self.assertTrue(torch.equal(
+            model.value_head[-1].bias,
+            torch.zeros_like(model.value_head[-1].bias),
+        ))
+        self.assertLess(float(value.abs().max()), 0.1)
+
     def test_sample_features_do_not_include_absolute_current_player_scalar(self) -> None:
         trainer = import_trainer()
 

@@ -218,6 +218,7 @@ class HexDirectionalCnnPolicyValueNet(nn.Module):
         self.register_buffer("grid_to_cell", cell_to_grid.transpose(0, 1))
         self.register_buffer("cell_grid_indices", _cell_grid_indices(), persistent=False)
         self.register_buffer("valid_mask", _valid_grid_mask())
+        self.reset_parameters()
 
     def forward(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = features.shape[0]
@@ -264,6 +265,20 @@ class HexDirectionalCnnPolicyValueNet(nn.Module):
         policy_logits = torch.cat((claim_logits, finish_logit), dim=1)
         value = torch.tanh(self.value_head(combined)).squeeze(-1)
         return policy_logits, value
+
+    def reset_parameters(self) -> None:
+        for module in self.modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
+        nn.init.normal_(self.claim_policy_scorer.weight, mean=0.0, std=0.01)
+        nn.init.zeros_(self.claim_policy_scorer.bias)
+        nn.init.normal_(self.finish_policy_scorer[-1].weight, mean=0.0, std=0.01)
+        nn.init.zeros_(self.finish_policy_scorer[-1].bias)
+        nn.init.normal_(self.value_head[-1].weight, mean=0.0, std=0.01)
+        nn.init.zeros_(self.value_head[-1].bias)
 
 
 def _neighbor_matrix() -> torch.Tensor:
