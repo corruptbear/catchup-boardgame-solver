@@ -20,10 +20,18 @@ enum class NeuralBackend {
     Mlx,
 };
 
+enum class NeuralValueTarget {
+    WinLoss,
+    TanhMarginScale6,
+};
+
 NeuralDevice parse_neural_device(const std::string& text);
 const char* neural_device_label(NeuralDevice device);
 NeuralBackend parse_neural_backend(const std::string& text);
 const char* neural_backend_label(NeuralBackend backend);
+NeuralValueTarget parse_neural_value_target(const std::string& text);
+const char* neural_value_target_label(NeuralValueTarget target);
+NeuralValueTarget infer_neural_value_target_from_model_path(const std::string& model_path);
 
 struct NeuralEvaluation {
     std::array<double, kMaxActions> priors{};
@@ -62,6 +70,7 @@ struct NeuralPuctConfig {
     double root_noise_reference_actions = kCellCount;
     double root_noise_action_power = 0.5;
     double root_noise_empty_power = 1.0;
+    NeuralValueTarget value_target = NeuralValueTarget::WinLoss;
 };
 
 class NeuralEvaluatorBase {

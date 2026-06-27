@@ -22,6 +22,7 @@
 namespace {
 
 enum class Engine {
+    Random,
     Mcts,
     Puct,
     NeuralPuct,
@@ -36,6 +37,7 @@ struct AgentSpec {
     Engine engine = Engine::Mcts;
     int simulations = 1000;
     PuctConfig puct_config;
+    NeuralPuctConfig neural_puct_config;
     std::string model_path;
     std::string label;
 };
@@ -127,9 +129,16 @@ std::vector<std::string> split_colon(const std::string& text) {
 
 AgentSpec parse_agent_spec(const std::string& text) {
     auto parts = split_colon(text);
+    if (parts.size() == 1 && parts[0] == "random") {
+        AgentSpec spec;
+        spec.engine = Engine::Random;
+        spec.label = text;
+        return spec;
+    }
+
     if (parts.size() < 2) {
         throw std::runtime_error(
-            "agent must be mcts:N, puct:N:prior=flat|heuristic:rollout=flat|biased, "
+            "agent must be random, mcts:N, puct:N:prior=flat|heuristic:rollout=flat|biased, "
             "or neural-puct:N:MODEL.pt2");
     }
 
@@ -183,9 +192,11 @@ AgentSpec parse_agent_spec(const std::string& text) {
         for (std::size_t index = 3; index < parts.size(); ++index) {
             spec.model_path += ":" + parts[index];
         }
+        spec.neural_puct_config.value_target =
+            infer_neural_value_target_from_model_path(spec.model_path);
     } else {
         throw std::runtime_error(
-            "agent must be mcts:N, puct:N:prior=flat|heuristic:rollout=flat|biased, "
+            "agent must be random, mcts:N, puct:N:prior=flat|heuristic:rollout=flat|biased, "
             "or neural-puct:N:MODEL.pt2");
     }
     return spec;
@@ -203,6 +214,31 @@ ActionSelection parse_action_selection(const std::string& text) {
 
 std::string action_selection_label(ActionSelection action_selection) {
     return action_selection == ActionSelection::SampleVisits ? "sample" : "max";
+}
+
+std::string neural_value_target_label_for_agent(const AgentSpec& agent) {
+    return agent.engine == Engine::NeuralPuct
+        ? neural_value_target_label(agent.neural_puct_config.value_target)
+        : "none";
+}
+
+bool parse_bool_arg(const std::string& text, const std::string& name) {
+    if (text == "true" || text == "1") {
+        return true;
+    }
+    if (text == "false" || text == "0") {
+        return false;
+    }
+    throw std::runtime_error(name + " must be true or false");
+}
+
+bool uses_tanh_margin_value(const AgentSpec& agent) {
+    return agent.engine == Engine::NeuralPuct
+        && agent.neural_puct_config.value_target == NeuralValueTarget::TanhMarginScale6;
+}
+
+bool default_early_win_enabled(const AgentSpec& agent_a, const AgentSpec& agent_b) {
+    return !uses_tanh_margin_value(agent_a) && !uses_tanh_margin_value(agent_b);
 }
 
 ActionSelectionByAgent default_action_selection(
@@ -309,6 +345,14 @@ int choose_action(
     std::mt19937_64& rng,
     NeuralEvaluatorBase* neural_evaluator,
     ActionSelection action_selection) {
+    if (spec.engine == Engine::Random) {
+        ActionList actions = state.legal_actions();
+        std::uniform_int_distribution<int> distribution(
+            0,
+            static_cast<int>(actions.size()) - 1);
+        return actions[distribution(rng)];
+    }
+
     if (spec.engine == Engine::Mcts) {
         Mcts search(spec.simulations, rng());
         const Node* root = search.search(state);
@@ -325,7 +369,11 @@ int choose_action(
             : best_action(root);
     }
 
-    NeuralPuctMcts search(spec.simulations, rng(), *neural_evaluator);
+    NeuralPuctMcts search(
+        spec.simulations,
+        rng(),
+        *neural_evaluator,
+        spec.neural_puct_config);
     const PuctNode* root = search.search(state);
     return action_selection == ActionSelection::SampleVisits
         ? sample_action(root, rng)
@@ -343,9 +391,11 @@ GameRecord play_game(
     int pair_index,
     int game_index,
     int max_actions,
+    bool early_win_enabled,
     ActionSelection blue_action_selection,
     ActionSelection white_action_selection) {
     TrackedState state;
+    state.early_win_enabled = early_win_enabled;
     std::mt19937_64 blue_rng(seed * 2 + 1);
     std::mt19937_64 white_rng(seed * 2 + 2);
     int internal_actions = 0;
@@ -465,6 +515,7 @@ std::vector<GameRecord> run_arena(
     double neural_batch_wait_ms,
     NeuralBackend neural_backend,
     NeuralDevice neural_device,
+    bool early_win_enabled,
     ActionSelectionByAgent action_selection) {
     int worker_count = effective_thread_count(pairs, threads);
     std::vector<GameRecord> records(static_cast<std::size_t>(pairs) * 2);
@@ -498,6 +549,7 @@ std::vector<GameRecord> run_arena(
                         pair_index,
                         first_record,
                         max_actions,
+                        early_win_enabled,
                         action_selection.agent_a,
                         action_selection.agent_b);
                     records[first_record + 1] = play_game(
@@ -511,6 +563,7 @@ std::vector<GameRecord> run_arena(
                         pair_index,
                         first_record + 1,
                         max_actions,
+                        early_win_enabled,
                         action_selection.agent_b,
                         action_selection.agent_a);
                 }
@@ -601,6 +654,7 @@ void print_text_report(
     std::uint64_t seed,
     NeuralBackend neural_backend,
     NeuralDevice neural_device,
+    bool early_win_enabled,
     ActionSelectionByAgent action_selection,
     const Summary& summary) {
     std::cout << "Arena: A=" << agent_a.label << " vs B=" << agent_b.label << "\n";
@@ -608,8 +662,13 @@ void print_text_report(
               << "  Threads: " << threads << "  Seed: " << seed
               << "  Neural backend: " << neural_backend_label(neural_backend)
               << "  Neural device: " << neural_device_label(neural_device)
+              << "  Early win: " << (early_win_enabled ? "true" : "false")
               << "  Action selection: A=" << action_selection_label(action_selection.agent_a)
               << " B=" << action_selection_label(action_selection.agent_b) << "\n";
+    if (agent_a.engine == Engine::NeuralPuct || agent_b.engine == Engine::NeuralPuct) {
+        std::cout << "Neural value target: A=" << neural_value_target_label_for_agent(agent_a)
+                  << " B=" << neural_value_target_label_for_agent(agent_b) << "\n";
+    }
     std::cout << "Result: A wins " << summary.agent_a_wins
               << ", B wins " << summary.agent_b_wins << "\n";
     std::cout.setf(std::ios::fixed);
@@ -654,6 +713,7 @@ void print_json_report(
     std::uint64_t seed,
     NeuralBackend neural_backend,
     NeuralDevice neural_device,
+    bool early_win_enabled,
     ActionSelectionByAgent action_selection,
     const Summary& summary,
     const std::vector<GameRecord>& records) {
@@ -669,10 +729,15 @@ void print_json_report(
     print_json_string(neural_backend_label(neural_backend));
     std::cout << ",\"neural_device\":";
     print_json_string(neural_device_label(neural_device));
+    std::cout << ",\"early_win\":" << (early_win_enabled ? "true" : "false");
     std::cout << ",\"agent_a_action_selection\":";
     print_json_string(action_selection_label(action_selection.agent_a));
     std::cout << ",\"agent_b_action_selection\":";
     print_json_string(action_selection_label(action_selection.agent_b));
+    std::cout << ",\"agent_a_neural_value_target\":";
+    print_json_string(neural_value_target_label_for_agent(agent_a));
+    std::cout << ",\"agent_b_neural_value_target\":";
+    print_json_string(neural_value_target_label_for_agent(agent_b));
     std::cout << ",\"summary\":{";
     std::cout << "\"games\":" << summary.games;
     std::cout << ",\"agent_a_wins\":" << summary.agent_a_wins;
@@ -764,6 +829,21 @@ int main(int argc, char** argv) {
             action_selection.agent_b =
                 parse_action_selection(agent_b_action_selection_arg->second);
         }
+        auto agent_a_neural_value_target_arg = args.find("agent-a-neural-value-target");
+        if (agent_a_neural_value_target_arg != args.end()) {
+            agent_a.neural_puct_config.value_target =
+                parse_neural_value_target(agent_a_neural_value_target_arg->second);
+        }
+        auto agent_b_neural_value_target_arg = args.find("agent-b-neural-value-target");
+        if (agent_b_neural_value_target_arg != args.end()) {
+            agent_b.neural_puct_config.value_target =
+                parse_neural_value_target(agent_b_neural_value_target_arg->second);
+        }
+        bool early_win_enabled = default_early_win_enabled(agent_a, agent_b);
+        auto early_win_arg = args.find("early-win");
+        if (early_win_arg != args.end()) {
+            early_win_enabled = parse_bool_arg(early_win_arg->second, "early-win");
+        }
         bool json = args.find("json") != args.end();
 
         int worker_count = effective_thread_count(pairs, threads);
@@ -778,6 +858,7 @@ int main(int argc, char** argv) {
             neural_batch_wait_ms,
             neural_backend,
             neural_device,
+            early_win_enabled,
             action_selection);
         Summary summary = summarize(records);
         if (json) {
@@ -789,6 +870,7 @@ int main(int argc, char** argv) {
                 seed,
                 neural_backend,
                 neural_device,
+                early_win_enabled,
                 action_selection,
                 summary,
                 records);
@@ -801,6 +883,7 @@ int main(int argc, char** argv) {
                 seed,
                 neural_backend,
                 neural_device,
+                early_win_enabled,
                 action_selection,
                 summary);
         }

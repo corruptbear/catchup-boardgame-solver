@@ -247,19 +247,26 @@ int main(int argc, char** argv) {
             NeuralBackend backend =
                 parse_neural_backend(arg_or_default(args, "neural-backend", "aoti"));
             int neural_batch_size = std::stoi(arg_or_default(args, "neural-batch-size", "1"));
+            std::string model_path = require_arg(args, "model");
+            NeuralPuctConfig config;
+            config.value_target = infer_neural_value_target_from_model_path(model_path);
+            auto neural_value_target_arg = args.find("neural-value-target");
+            if (neural_value_target_arg != args.end()) {
+                config.value_target = parse_neural_value_target(neural_value_target_arg->second);
+            }
             std::unique_ptr<NeuralEvaluatorBase> evaluator;
             if (backend == NeuralBackend::Mlx) {
                 evaluator = std::make_unique<NeuralEvaluator>(
-                    make_mlx_neural_batch_model(require_arg(args, "model"), neural_batch_size));
+                    make_mlx_neural_batch_model(model_path, neural_batch_size));
             } else {
                 NeuralDevice device = parse_neural_device(arg_or_default(args, "neural-device", "mps"));
                 evaluator = std::make_unique<NeuralEvaluator>(
                     make_aoti_neural_batch_model(
-                        require_arg(args, "model"),
+                        model_path,
                         neural_batch_size,
                         device));
             }
-            NeuralPuctMcts mcts(simulations, seed, *evaluator);
+            NeuralPuctMcts mcts(simulations, seed, *evaluator, config);
             PuctNode* root = mcts.search(state);
             print_result(root, simulations, engine);
         } else {

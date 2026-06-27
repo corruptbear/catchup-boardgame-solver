@@ -307,3 +307,142 @@ iter_0012 npuct400  iter_0012 npuct200  neural-puct:400     1    128   54-74    
 ```
 
 Both agents used visit-count sampling in the direct neural-vs-neural check.
+
+## Experiment 5: Random Init Tanh-Margin
+
+This branch starts from random weights instead of a bootstrap teacher-trained
+checkpoint. It also trains the value head on the terminal tanh-margin target
+instead of the win/loss target.
+
+Setup:
+
+```text
+base checkpoint                  data/models/directional_cnn_h64_tanh_margin_random_init.pt
+architecture                     directional-cnn-tanh-margin
+value target                     tanh-margin-scale6
+weight initialization            Kaiming normal trunk, zero biases, small output heads
+optimizer                        AdamW
+weight_decay                     1e-4
+self-play search                 neural-puct:200
+self-play games per generation   640
+evaluator backend                MLX
+neural batch size                128
+early win during self-play        false
+```
+
+Boundary note: `iter_0001` through `iter_0010` were generated before the
+terminal-leaf value convention was corrected. In those generations,
+non-terminal leaves used the model's tanh-margin output, but terminal leaves
+backed up exact win/loss `+1/-1`. Starting with `iter_0011`, terminal leaves
+also back up `tanh-margin-scale6`. Self-play remains full-board play with
+`--early-win false`.
+
+Replay buffer settings:
+
+```text
+replay window generations        10
+replay gamma                     0.85
+target lifetime coverage         2.0
+training minibatch size          512
+symmetry copies                  3
+replay data glob                 data/neural_self_play_random_init_tanh_margin/iter_*.jsonl
+```
+
+Self-play and replay training summary:
+
+```text
+generation  sims  samples  Blue  White  avg filled  avg turns  train batches  train samples  train sec  loss    policy  value
+iter_0001    200    50808   323    317      61.000    39.584             20          10240      1.954  3.6729  2.7377  0.9351
+iter_0002    200    50870   312    328      61.000    37.334             40          20480      3.734  2.9235  2.1783  0.7452
+iter_0003    200    45886   416    224      61.000    30.166             54          27648      5.170  2.7376  2.1348  0.6028
+iter_0004    200    44221   351    289      61.000    28.688             70          35840      6.594  2.6603  2.1533  0.5070
+iter_0005    200    44130   337    303      61.000    29.341             87          44544      7.706  2.6515  2.1677  0.4838
+iter_0006    200    43673   318    322      61.000    29.161            103          52736      9.201  2.6514  2.1920  0.4594
+iter_0007    200    44649   337    303      61.000    30.753            123          62976     11.242  2.6547  2.2073  0.4474
+iter_0008    200    42168   343    297      61.000    28.741            132          67584     10.816  2.6792  2.2502  0.4290
+iter_0009    200    40657   324    316      61.000    26.156            143          73216     11.781  2.6939  2.2825  0.4114
+iter_0010    200    41153   301    339      61.000    27.075            161          82432     14.417  2.6727  2.2865  0.3861
+iter_0011    200    40428   302    338      61.000    26.453            158          80896     14.409  2.6716  2.3163  0.3553
+iter_0012    200    40628   327    313      61.000    26.781            159          81408     13.121  2.6553  2.3180  0.3373
+iter_0013    200    40783   307    333      61.000    27.528            160          81920     14.284  2.6658  2.3273  0.3385
+iter_0014    200    40470   330    310      61.000    26.691            159          81408     13.245  2.6387  2.3125  0.3262
+iter_0015    200    40465   338    302      61.000    27.009            159          81408     13.528  2.6083  2.2976  0.3108
+iter_0016    200    40293   306    334      61.000    26.622            158          80896     14.189  2.5958  2.2887  0.3071
+iter_0017    200    40272   326    314      61.000    26.884            158          80896     14.437  2.5550  2.2743  0.2808
+iter_0018    200    40556   324    316      61.000    27.036            159          81408     13.287  2.5264  2.2438  0.2826
+iter_0019    200    40075   349    291      61.000    26.897            157          80384     12.999  2.4987  2.2266  0.2721
+iter_0020    200    40454   332    308      61.000    27.209            159          81408     12.822  2.4715  2.2003  0.2712
+iter_0021    200    40372   317    323      61.000    27.225            158          80896     12.863  2.4424  2.1719  0.2704
+iter_0022    200    40528   339    301      61.000    27.414            159          81408     13.565  2.4017  2.1388  0.2629
+iter_0023    200    40448   331    309      61.000    27.712            158          80896     12.367  2.3932  2.1289  0.2643
+iter_0024    200    40478   323    317      61.000    27.397            159          81408     13.110  2.3729  2.1156  0.2573
+iter_0025    200    40492   315    325      61.000    27.466            159          81408     13.830  2.3545  2.0965  0.2581
+iter_0026    200    40271   334    306      61.000    27.236            158          80896     12.368  2.3506  2.0973  0.2533
+iter_0027    200    40525   323    317      61.000    27.986            159          81408     13.375  2.3337  2.0766  0.2570
+iter_0028    200    40318   312    328      61.000    27.663            158          80896     14.206  2.3156  2.0663  0.2493
+iter_0029    200    40372   310    330      61.000    27.753            158          80896     13.769  2.2952  2.0515  0.2437
+iter_0030    200    39991   327    313      61.000    27.212            157          80384     13.966  2.2874  2.0479  0.2395
+iter_0031    200    40219   309    331      61.000    27.505            158          80896     13.635  2.2903  2.0514  0.2389
+iter_0032    200    40282   305    335      61.000    27.802            158          80896     12.428  2.2892  2.0553  0.2339
+iter_0033    200    40139   326    314      61.000    27.436            157          80384     12.961  2.2785  2.0490  0.2296
+iter_0034    200    40319   324    316      61.000    27.892            158          80896     12.367  2.2525  2.0271  0.2254
+iter_0035    200    40264   315    325      61.000    27.927            158          80896     12.249  2.2456  2.0214  0.2242
+iter_0036    200    40315   320    320      61.000    27.913            158          80896     12.248  2.2375  2.0138  0.2237
+iter_0037    200    40242   324    316      61.000    27.778            158          80896     12.239  2.2307  2.0151  0.2156
+iter_0038    200    40427   331    309      61.000    28.150            158          80896     12.265  2.2138  1.9993  0.2145
+iter_0039    200    40085   307    333      61.000    27.863            157          80384     13.737  2.2149  1.9991  0.2159
+iter_0040    200    40273   311    329      61.000    27.973            158          80896     13.217  2.2110  1.9995  0.2115
+```
+
+After the corrected terminal backup, policy loss first rose from `2.2865` at
+`iter_0010` to `2.3273` at `iter_0013`, then improved to `2.2003` by
+`iter_0020`. Value loss improved from `0.3861` at `iter_0010` to `0.2712` by
+`iter_0020`. Continuing to `iter_0030`, policy loss improved further to
+`2.0479` and value loss to `0.2395`. Continuing to `iter_0040`, policy loss
+improved to `1.9995` and value loss to `0.2115`. By `iter_0020`, the replay
+window is fully post-correction (`iter_0011` through `iter_0020`); by
+`iter_0040`, it has rolled to `iter_0031` through `iter_0040`. This is a moving
+replay distribution, so strength still needs arena checks rather than loss-only
+judgement.
+
+Saved shard path pattern:
+
+```text
+data/neural_self_play_random_init_tanh_margin/iter_*_directional_h64_tanh_margin_random_init_npuct200_640g_b128.jsonl
+```
+
+Saved replay checkpoint pattern:
+
+```text
+data/models/directional_cnn_h64_tanh_margin_random_init_adamw_wd1e4_iter_*_npuct200_replay.pt
+data/models/directional_cnn_h64_tanh_margin_random_init_adamw_wd1e4_iter_*_npuct200_replay_mlx.safetensors
+```
+
+Arena checks:
+
+```text
+model matchup                     search           seed  games  action selection  result  score rate  Blue result  White result  real
+iter_0010 vs random               neural-puct:200      1     40  max/max           40-0       100.0%     20-0         20-0       72.46s
+iter_0009 vs heuristic puct:1000  neural-puct:200      1     80  max/max            0-80        0.0%      0-40         0-40      60.50s
+iter_0010 vs iter_0005            neural-puct:200      1     80  sample/sample     73-7        91.2%     38-2         35-5      227.51s
+iter_0020 vs heuristic puct:1000  neural-puct:200      1     80  max/max           13-67       16.2%      8-32         5-35      80.80s
+iter_0020 vs iter_0010            neural-puct:200      1     80  sample/sample     74-6        92.5%     36-4         38-2      221.87s
+iter_0030 vs heuristic puct:1000  neural-puct:200      1     80  max/max           43-37       53.8%     23-17        20-20      76.74s
+iter_0030 vs heuristic puct:10000 neural-puct:200      1     80  max/max           16-64       20.0%      8-32         8-32     113.28s
+iter_0040 vs heuristic puct:1000  neural-puct:200      1     80  max/max           55-25       68.8%     27-13        28-12      79.07s
+iter_0040 vs heuristic puct:10000 neural-puct:200      1     80  max/max           26-54       32.5%     11-29        15-25     113.48s
+```
+
+The direct neural-vs-neural checks above used full-board arena play with
+`--early-win false`; average filled cells were `61.0`.
+
+The random-init branch learns enough to crush a pure random player by
+`iter_0010`. Direct neural-vs-neural checks show large within-branch
+improvement: `iter_0010` beat `iter_0005` by `73-7`, and `iter_0020` beat
+`iter_0010` by `74-6`. Against `puct:1000:prior=heuristic:rollout=biased`,
+the comparable 80-game result moved from `0-80` at `iter_0009`, to `13-67` at
+`iter_0020`, to `43-37` at `iter_0030`. That makes `iter_0030` roughly even
+with heuristic `puct:1000` under this benchmark. `iter_0040` improved further
+to `55-25` against `puct:1000`. Against the stronger heuristic `puct:10000`
+baseline, the branch is still behind, but the 80-game result improved from
+`16-64` at `iter_0030` to `26-54` at `iter_0040`.

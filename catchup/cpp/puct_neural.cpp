@@ -54,6 +54,58 @@ const char* neural_backend_label(NeuralBackend backend) {
     return backend == NeuralBackend::Mlx ? "mlx" : "aoti";
 }
 
+NeuralValueTarget parse_neural_value_target(const std::string& text) {
+    if (text == "win-loss") {
+        return NeuralValueTarget::WinLoss;
+    }
+    if (text == "tanh-margin-scale6") {
+        return NeuralValueTarget::TanhMarginScale6;
+    }
+    throw std::runtime_error("neural value target must be win-loss or tanh-margin-scale6");
+}
+
+const char* neural_value_target_label(NeuralValueTarget target) {
+    return target == NeuralValueTarget::TanhMarginScale6
+        ? "tanh-margin-scale6"
+        : "win-loss";
+}
+
+NeuralValueTarget infer_neural_value_target_from_model_path(const std::string& model_path) {
+    return model_path.find("tanh_margin") != std::string::npos
+            || model_path.find("tanh-margin") != std::string::npos
+        ? NeuralValueTarget::TanhMarginScale6
+        : NeuralValueTarget::WinLoss;
+}
+
+double terminal_tanh_margin_value_for(const TrackedState& state, int player) {
+    auto blue_sizes = state.group_sizes(kPlayerOne);
+    auto white_sizes = state.group_sizes(kPlayerTwo);
+    std::size_t max_ranks = std::max(blue_sizes.size(), white_sizes.size());
+    for (std::size_t rank = 0; rank < max_ranks; ++rank) {
+        int blue_size = rank < blue_sizes.size() ? blue_sizes[rank] : 0;
+        int white_size = rank < white_sizes.size() ? white_sizes[rank] : 0;
+        int diff = blue_size - white_size;
+        if (diff != 0) {
+            if (player == kPlayerTwo) {
+                diff = -diff;
+            }
+            double raw = static_cast<double>(diff) * std::pow(0.5, static_cast<double>(rank));
+            return std::tanh(raw / 6.0);
+        }
+    }
+    throw std::logic_error("terminal Catchup state has equal component vectors");
+}
+
+double terminal_value_for(
+    const TrackedState& state,
+    int player,
+    NeuralValueTarget value_target) {
+    if (value_target == NeuralValueTarget::TanhMarginScale6) {
+        return terminal_tanh_margin_value_for(state, player);
+    }
+    return static_cast<double>(state.result_for(player));
+}
+
 std::vector<NeuralEvaluation> build_neural_evaluations(
     const std::vector<TrackedState>& states,
     const std::vector<ActionList>& legal_actions,
@@ -349,7 +401,10 @@ NeuralPuctMcts::LeafEvaluation NeuralPuctMcts::select_and_evaluate(PuctNode* roo
         if (node->state.is_terminal()) {
             return {
                 path,
-                static_cast<double>(node->state.result_for(node->state.current_player)),
+                terminal_value_for(
+                    node->state,
+                    node->state.current_player,
+                    config_.value_target),
                 node->state.current_player,
             };
         }
@@ -361,7 +416,10 @@ NeuralPuctMcts::LeafEvaluation NeuralPuctMcts::select_and_evaluate(PuctNode* roo
             if (child->state.is_terminal()) {
                 return {
                     path,
-                    static_cast<double>(child->state.result_for(child->state.current_player)),
+                    terminal_value_for(
+                        child->state,
+                        child->state.current_player,
+                        config_.value_target),
                     child->state.current_player,
                 };
             }

@@ -264,6 +264,56 @@ GNN h128 whole model:                         201475
 The h64 directional-CNN whole model is about the same size as the h128 GNN's
 message-passing stack alone.
 
+## Directional CNN Tanh-Margin Variant
+
+```text
+architecture=directional-cnn-tanh-margin
+```
+
+This variant uses the same `HexDirectionalCnnPolicyValueNet` as
+`directional-cnn`. The input format, policy output, value output, and parameter
+count are unchanged. With `hidden_size = 64` and `cnn_layers = 4`, it is still
+132995 trainable parameters.
+
+The only difference is the value target used during training. Instead of the
+final win/loss target `+1` or `-1`, it trains on a softer terminal margin target
+computed from the final component-size vectors.
+
+For one saved training sample:
+
+```text
+blue_sizes  = terminal.blue_group_sizes
+white_sizes = terminal.white_group_sizes
+rank        = first index where blue_sizes[rank] != white_sizes[rank]
+diff        = blue_sizes[rank] - white_sizes[rank]
+```
+
+Missing component sizes count as `0`. The sign is then converted to the saved
+state's current-player perspective:
+
+```text
+if state.current_player is White:
+    diff = -diff
+```
+
+Lower-ranked component wins are discounted:
+
+```text
+raw = diff * (0.5 ** rank)
+```
+
+The final target is:
+
+```text
+value_target = tanh(raw / 6.0)
+```
+
+So winning by the largest component keeps the full size difference, winning by
+the second component uses half the size difference, winning by the third uses a
+quarter, and so on. The outer `tanh` keeps the target in the same `[-1, +1]`
+range as the value head output while preserving more information than plain
+win/loss.
+
 Training command:
 
 ```sh

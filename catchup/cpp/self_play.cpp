@@ -135,6 +135,8 @@ Config parse_config(int argc, char** argv) {
     } else if (teacher == "neural-puct") {
         config.teacher = TeacherKind::NeuralPuct;
         config.model_path = require_arg(args, "model");
+        config.neural_puct_config.value_target =
+            infer_neural_value_target_from_model_path(config.model_path);
     } else {
         throw std::runtime_error("teacher must be puct or neural-puct");
     }
@@ -146,6 +148,11 @@ Config parse_config(int argc, char** argv) {
     config.neural_batch_wait_ms = std::stod(arg_or_default(args, "neural-batch-wait-ms", "0.5"));
     config.neural_backend = parse_neural_backend(arg_or_default(args, "neural-backend", "aoti"));
     config.neural_device = parse_neural_device(arg_or_default(args, "neural-device", "mps"));
+    auto neural_value_target_arg = args.find("neural-value-target");
+    if (neural_value_target_arg != args.end()) {
+        config.neural_puct_config.value_target =
+            parse_neural_value_target(neural_value_target_arg->second);
+    }
     config.neural_puct_config.root_noise_epsilon = std::stod(
         arg_or_default(args, "root-noise-epsilon", "0.25"));
     config.neural_puct_config.root_dirichlet_total_concentration = std::stod(
@@ -506,6 +513,8 @@ std::string teacher_label(const Config& config) {
             + ":batch=" + std::to_string(config.neural_batch_size)
             + ":backend=" + neural_backend_label(config.neural_backend)
             + ":device=" + neural_device_label(config.neural_device)
+            + ":value_target="
+            + neural_value_target_label(config.neural_puct_config.value_target)
             + ":root_noise_epsilon=" + std::to_string(
                 config.neural_puct_config.root_noise_epsilon)
             + ":root_dirichlet_total_concentration=" + std::to_string(

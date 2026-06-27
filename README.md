@@ -104,6 +104,13 @@ Arena options:
 --neural-device cpu|mps   device for neural AOTI inference; default mps
 --neural-batch-size N     fixed neural eval batch size; default 32
 --neural-batch-wait-ms N  max wait to gather a neural batch; default 0.5
+--agent-a-neural-value-target win-loss|tanh-margin-scale6
+--agent-b-neural-value-target win-loss|tanh-margin-scale6
+                 terminal leaf value for neural PUCT; inferred from model path
+                 by default, with tanh_margin/tanh-margin using tanh-margin-scale6
+--early-win true|false
+                 arena terminal rule; default false when either neural agent uses
+                 tanh-margin-scale6, true otherwise
 --json           print full JSON records instead of the text summary
 ```
 
