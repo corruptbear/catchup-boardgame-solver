@@ -18,9 +18,6 @@ namespace mx = mlx::core;
 
 namespace {
 
-constexpr int kGridWidth = 9;
-constexpr int kGridRadius = kGridWidth / 2;
-constexpr int kGridCellCount = kGridWidth * kGridWidth;
 constexpr int kCellFeatureCount = 4;
 constexpr int kGlobalFeatureCount = 4;
 constexpr int kMlxInputChannels = kCellFeatureCount + 1 + kGlobalFeatureCount + 1;
@@ -31,31 +28,42 @@ std::uint64_t elapsed_ns(Clock::time_point start, Clock::time_point end) {
         std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
 }
 
-std::array<int, kCellCount> make_cell_grid_indices() {
-    std::array<int, kCellCount> indices{};
-    const auto& coords = board().coords;
-    for (int cell = 0; cell < kCellCount; ++cell) {
-        auto [q, r] = coords[cell];
-        indices[cell] = (r + kGridRadius) * kGridWidth + (q + kGridRadius);
-    }
-    return indices;
-}
-
-std::array<float, kGridCellCount> make_valid_mask_values(
-    const std::array<int, kCellCount>& grid_indices) {
-    std::array<float, kGridCellCount> mask{};
-    for (int grid_index : grid_indices) {
-        mask[grid_index] = 1.0F;
-    }
-    return mask;
-}
-
 mx::array array_from_values(const std::vector<float>& values, mx::Shape shape) {
     return mx::array(values.begin(), std::move(shape), mx::float32);
 }
 
-mx::array array_from_values(const std::array<float, kGridCellCount>& values, mx::Shape shape) {
+template <std::size_t N>
+mx::array array_from_values(const std::array<float, N>& values, mx::Shape shape) {
     return mx::array(values.begin(), std::move(shape), mx::float32);
+}
+
+std::array<float, kCellCount * 6 * kCellCount> make_compact_direction_wide_values() {
+    constexpr std::array<std::pair<int, int>, 6> directions = {{
+        {1, 0},
+        {-1, 0},
+        {0, 1},
+        {0, -1},
+        {1, -1},
+        {-1, 1},
+    }};
+
+    std::array<float, kCellCount * 6 * kCellCount> values{};
+    const Board& current_board = board();
+    for (int direction = 0; direction < 6; ++direction) {
+        auto [dq, dr] = directions[direction];
+        for (int destination = 0; destination < kCellCount; ++destination) {
+            auto [q, r] = current_board.coords[destination];
+            int source_q = q + dq;
+            int source_r = r + dr;
+            for (int source = 0; source < kCellCount; ++source) {
+                if (current_board.coords[source] == std::pair<int, int>{source_q, source_r}) {
+                    values[source * (6 * kCellCount) + direction * kCellCount + destination] = 1.0F;
+                    break;
+                }
+            }
+        }
+    }
+    return values;
 }
 
 mx::array linear(const mx::array& x, const mx::array& weight, const mx::array& bias) {
@@ -81,14 +89,9 @@ public:
     MlxDirectionalModel(std::string weights_path, int requested_batch_size)
         : weights_(mx::load_safetensors(weights_path).first),
           batch_size_(requested_batch_size),
-          grid_indices_(make_cell_grid_indices()),
-          valid_mask_(array_from_values(
-              make_valid_mask_values(grid_indices_),
-              {1, kGridCellCount, 1})),
-          cell_grid_indices_([&]() {
-              std::vector<std::int32_t> values(grid_indices_.begin(), grid_indices_.end());
-              return mx::array(values.begin(), {kCellCount}, mx::int32);
-          }()) {
+          direction_wide_matrix_(array_from_values(
+              make_compact_direction_wide_values(),
+              {kCellCount, 6 * kCellCount})) {
         if (batch_size_ <= 0) {
             throw std::runtime_error("MLX batch size must be positive");
         }
@@ -98,7 +101,7 @@ public:
                     return forward(inputs);
                 }),
             false);
-        auto warmup_input = mx::zeros({batch_size_, kGridCellCount, kMlxInputChannels});
+        auto warmup_input = mx::zeros({batch_size_, kCellCount, kMlxInputChannels});
         auto warmup_global = mx::zeros({batch_size_, kGlobalFeatureCount + 1});
         auto outputs = compiled_forward_({warmup_input, warmup_global});
         mx::eval(outputs);
@@ -116,7 +119,7 @@ public:
 
         auto feature_started = Clock::now();
         std::vector<float> input_values(
-            static_cast<std::size_t>(batch_size_) * kGridCellCount * kMlxInputChannels,
+            static_cast<std::size_t>(batch_size_) * kCellCount * kMlxInputChannels,
             0.0F);
         std::vector<float> global_values(
             static_cast<std::size_t>(batch_size_) * (kGlobalFeatureCount + 1),
@@ -153,7 +156,7 @@ public:
 
             for (int cell = 0; cell < kCellCount; ++cell) {
                 float* features = input_values.data()
-                    + (state_index * kGridCellCount + grid_indices_[cell]) * kMlxInputChannels;
+                    + (state_index * kCellCount + cell) * kMlxInputChannels;
                 int owner = state.owners[cell];
                 features[0] = owner == kEmpty ? 1.0F : 0.0F;
                 features[1] = owner == state.current_player ? 1.0F : 0.0F;
@@ -175,7 +178,7 @@ public:
         auto input_started = Clock::now();
         mx::array input_grid = array_from_values(
             input_values,
-            {batch_size_, kGridCellCount, kMlxInputChannels});
+            {batch_size_, kCellCount, kMlxInputChannels});
         mx::array global_features = array_from_values(
             global_values,
             {batch_size_, kGlobalFeatureCount + 1});
@@ -209,17 +212,15 @@ public:
 private:
     std::vector<mx::array> forward(const std::vector<mx::array>& inputs) const {
         mx::array hidden = relu(conv1x1(inputs[0], "input_projection"));
-        hidden = hidden * valid_mask_;
         for (int block = 0; block < 4; ++block) {
             hidden = run_block(hidden, block);
         }
 
-        mx::array pooled = mx::sum(hidden * valid_mask_, 1) / mx::array(static_cast<float>(kCellCount));
+        mx::array pooled = mx::sum(hidden, 1) / mx::array(static_cast<float>(kCellCount));
         mx::array global_hidden = relu(linear_layer(inputs[1], "global_encoder"));
         mx::array combined = mx::concatenate({pooled, global_hidden}, 1);
 
-        mx::array claim_grid = mx::squeeze(conv1x1(hidden, "claim_policy_scorer"), 2);
-        mx::array claim_logits = mx::take(claim_grid, cell_grid_indices_, 1);
+        mx::array claim_logits = mx::squeeze(conv1x1(hidden, "claim_policy_scorer"), 2);
         mx::array finish_hidden = relu(linear_layer(combined, "finish_policy_scorer.0"));
         mx::array finish_logit = linear_layer(finish_hidden, "finish_policy_scorer.2");
         mx::array policy_logits = mx::concatenate({claim_logits, finish_logit}, 1);
@@ -232,19 +233,22 @@ private:
     mx::array run_block(const mx::array& hidden, int block) const {
         std::string prefix = "blocks." + std::to_string(block);
         mx::array hidden_transposed = mx::transpose(hidden, {0, 2, 1});
-        std::vector<mx::array> directional_neighbors;
-        directional_neighbors.reserve(6);
-        mx::array matrices = require_weight(weights_, prefix + ".direction_matrices");
-        for (int direction = 0; direction < 6; ++direction) {
-            mx::array direction_matrix = mx::take(matrices, direction, 0);
-            mx::array neighbor = mx::matmul(hidden_transposed, direction_matrix);
-            directional_neighbors.push_back(mx::transpose(neighbor, {0, 2, 1}));
-        }
-        mx::array neighbor_stack = mx::concatenate(directional_neighbors, 2);
+        // Keep channels ordered as dir0, dir1, ..., dir5 to match neighbor_linear.
+        mx::array flat_hidden = mx::reshape(
+            hidden_transposed,
+            {hidden.shape()[0] * hidden.shape()[2], kCellCount});
+        mx::array wide_neighbors = mx::matmul(flat_hidden, direction_wide_matrix_);
+        mx::array neighbor_stack = mx::reshape(
+            mx::transpose(
+                mx::reshape(
+                    wide_neighbors,
+                    {hidden.shape()[0], hidden.shape()[2], 6, kCellCount}),
+                {0, 3, 2, 1}),
+            {hidden.shape()[0], kCellCount, 6 * hidden.shape()[2]});
         mx::array update = relu(
             conv1x1(hidden, prefix + ".self_linear")
             + conv1x1(neighbor_stack, prefix + ".neighbor_linear"));
-        return (hidden + update) * valid_mask_;
+        return hidden + update;
     }
 
     mx::array conv1x1(const mx::array& x, const std::string& prefix) const {
@@ -262,9 +266,7 @@ private:
 
     std::unordered_map<std::string, mx::array> weights_;
     int batch_size_;
-    std::array<int, kCellCount> grid_indices_;
-    mx::array valid_mask_;
-    mx::array cell_grid_indices_;
+    mx::array direction_wide_matrix_;
     std::function<std::vector<mx::array>(const std::vector<mx::array>&)> compiled_forward_;
 };
 
