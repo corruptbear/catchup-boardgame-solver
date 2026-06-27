@@ -59,3 +59,4 @@ catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gn
 - Commands involving MPS should be run unsandboxed.
 - For neural self-play data, use root Dirichlet noise plus visit-count sampling; the saved policy target remains raw normalized visits.
 - Count raw positions for replay-buffer coverage. Symmetry augmentation changes views; it does not create independent positions.
+- Arena game seeds are hashed from `(base_seed, pair_index, game_in_pair)`, so adjacent base seeds no longer just shift by one game. Older arena rows generated before this fix used consecutive game seeds; separated base seeds such as `1`, `100001`, and `200001` were used there to avoid overlap.

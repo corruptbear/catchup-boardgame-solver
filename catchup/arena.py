@@ -69,6 +69,24 @@ class GameRecord:
     completed_turns: int
     internal_actions: int
     filled_cells: int
+    game_seed: int = 0
+
+
+def mix_seed(value: int) -> int:
+    """Return the SplitMix64 output for one 64-bit integer."""
+
+    value = (value + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+    value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+    value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+    return (value ^ (value >> 31)) & 0xFFFFFFFFFFFFFFFF
+
+
+def arena_game_seed(base_seed: int, pair_index: int, game_in_pair: int) -> int:
+    """Derive one deterministic arena game seed from the base seed and game id."""
+
+    value = mix_seed(base_seed)
+    value = mix_seed(value ^ pair_index)
+    return mix_seed(value ^ (game_in_pair + 0xD1B54A32D192ED03))
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,6 +306,7 @@ def play_game(
         completed_turns=state.completed_turns,
         internal_actions=internal_actions,
         filled_cells=state.board.cell_count - state.tracker.empty_count(),
+        game_seed=seed,
     )
 
 
@@ -306,7 +325,8 @@ def run_arena(
 
     records: list[GameRecord] = []
     for pair_index in range(pairs):
-        first_seed = seed + pair_index * 2
+        first_seed = arena_game_seed(seed, pair_index, 0)
+        second_seed = arena_game_seed(seed, pair_index, 1)
         records.append(
             play_game(
                 agent_a,
@@ -329,7 +349,7 @@ def run_arena(
                 agent_b=agent_b.label,
                 blue_side="B",
                 white_side="A",
-                seed=first_seed + 1,
+                seed=second_seed,
                 pair_index=pair_index,
                 game_index=len(records),
                 max_actions=max_actions,
@@ -389,6 +409,7 @@ def report_to_dict(report: ArenaReport) -> dict[str, object]:
             {
                 "pair_index": record.pair_index,
                 "game_index": record.game_index,
+                "game_seed": record.game_seed,
                 "blue_agent": record.blue_agent,
                 "white_agent": record.white_agent,
                 "blue_side": record.blue_side,

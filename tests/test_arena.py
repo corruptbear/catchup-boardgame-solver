@@ -1,6 +1,12 @@
 import unittest
 
-from catchup.arena import GameRecord, parse_agent_spec, run_arena, summarize_records
+from catchup.arena import (
+    GameRecord,
+    arena_game_seed,
+    parse_agent_spec,
+    run_arena,
+    summarize_records,
+)
 from catchup.components import PLAYER_ONE, PLAYER_TWO
 from catchup.cpp_solver import find_cpp_solver
 
@@ -47,6 +53,22 @@ class ArenaTest(unittest.TestCase):
         self.assertEqual(report.records[0].blue_side, "A")
         self.assertEqual(report.records[1].blue_side, "B")
         self.assertEqual(report.summary["games"], 2)
+
+    def test_arena_game_seed_does_not_overlap_for_adjacent_base_seeds(self) -> None:
+        first = {
+            arena_game_seed(base_seed=1, pair_index=pair_index, game_in_pair=game_in_pair)
+            for pair_index in range(64)
+            for game_in_pair in range(2)
+        }
+        second = {
+            arena_game_seed(base_seed=2, pair_index=pair_index, game_in_pair=game_in_pair)
+            for pair_index in range(64)
+            for game_in_pair in range(2)
+        }
+
+        self.assertEqual(len(first), 128)
+        self.assertEqual(len(second), 128)
+        self.assertTrue(first.isdisjoint(second))
 
     def test_summarize_records_counts_agent_sides_not_labels(self) -> None:
         records = (

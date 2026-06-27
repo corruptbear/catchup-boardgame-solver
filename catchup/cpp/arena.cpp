@@ -50,6 +50,7 @@ struct ActionSelectionByAgent {
 struct GameRecord {
     int pair_index = 0;
     int game_index = 0;
+    std::uint64_t game_seed = 0;
     std::string blue_agent;
     std::string white_agent;
     std::string blue_side;
@@ -115,6 +116,20 @@ std::string arg_or_default(
         return default_value;
     }
     return found->second;
+}
+
+std::uint64_t mix_seed(std::uint64_t value) {
+    value += 0x9E3779B97F4A7C15ULL;
+    value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    value = (value ^ (value >> 27)) * 0x94D049BB133111EBULL;
+    return value ^ (value >> 31);
+}
+
+std::uint64_t arena_game_seed(std::uint64_t base_seed, int pair_index, int game_in_pair) {
+    std::uint64_t value = mix_seed(base_seed);
+    value = mix_seed(value ^ static_cast<std::uint64_t>(pair_index));
+    value = mix_seed(value ^ (static_cast<std::uint64_t>(game_in_pair) + 0xD1B54A32D192ED03ULL));
+    return value;
 }
 
 std::vector<std::string> split_colon(const std::string& text) {
@@ -427,6 +442,7 @@ GameRecord play_game(
     GameRecord record;
     record.pair_index = pair_index;
     record.game_index = game_index;
+    record.game_seed = seed;
     record.blue_agent = blue.label;
     record.white_agent = white.label;
     record.blue_side = blue_side;
@@ -535,8 +551,8 @@ std::vector<GameRecord> run_arena(
         workers.emplace_back([&, worker]() {
             try {
                 for (int pair_index = worker; pair_index < pairs; pair_index += worker_count) {
-                    std::uint64_t first_seed =
-                        seed + static_cast<std::uint64_t>(pair_index) * 2;
+                    std::uint64_t first_seed = arena_game_seed(seed, pair_index, 0);
+                    std::uint64_t second_seed = arena_game_seed(seed, pair_index, 1);
                     int first_record = pair_index * 2;
                     records[first_record] = play_game(
                         agent_a,
@@ -559,7 +575,7 @@ std::vector<GameRecord> run_arena(
                         neural_evaluators.agent_a,
                         "B",
                         "A",
-                        first_seed + 1,
+                        second_seed,
                         pair_index,
                         first_record + 1,
                         max_actions,
@@ -772,6 +788,7 @@ void print_json_report(
         std::cout << "{";
         std::cout << "\"pair_index\":" << record.pair_index;
         std::cout << ",\"game_index\":" << record.game_index;
+        std::cout << ",\"game_seed\":" << record.game_seed;
         std::cout << ",\"blue_agent\":";
         print_json_string(record.blue_agent);
         std::cout << ",\"white_agent\":";

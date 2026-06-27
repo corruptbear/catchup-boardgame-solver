@@ -78,6 +78,38 @@ class CppArenaTest(unittest.TestCase):
         self.assertEqual(single_payload["threads"], 1)
         self.assertEqual(parallel_payload["threads"], 2)
 
+    def test_cpp_arena_game_seeds_do_not_overlap_for_adjacent_base_seeds(self) -> None:
+        if not CPP_ARENA.is_file():
+            self.skipTest("C++ arena binary is not built")
+
+        def game_seeds(seed: int) -> set[int]:
+            completed = subprocess.run(
+                [
+                    str(CPP_ARENA),
+                    "--agent-a",
+                    "random",
+                    "--agent-b",
+                    "random",
+                    "--pairs",
+                    "64",
+                    "--seed",
+                    str(seed),
+                    "--json",
+                ],
+                capture_output=True,
+                check=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            return {int(game["game_seed"]) for game in payload["games"]}
+
+        first = game_seeds(1)
+        second = game_seeds(2)
+
+        self.assertEqual(len(first), 128)
+        self.assertEqual(len(second), 128)
+        self.assertTrue(first.isdisjoint(second))
+
 
 if __name__ == "__main__":
     unittest.main()
