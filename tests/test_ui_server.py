@@ -1,4 +1,5 @@
 import unittest
+from tempfile import TemporaryDirectory
 
 import catchup.ui_server as ui_server
 from catchup.components import PLAYER_ONE, PLAYER_TWO
@@ -34,6 +35,29 @@ class UiServerTest(unittest.TestCase):
         self.assertEqual(region["blue"], [{"root": 30, "size": 1}])
         self.assertEqual(region["white"], [])
 
+    def test_neural_model_options_lists_actual_mlx_checkpoints(self) -> None:
+        original_model_dir = ui_server.NEURAL_MODEL_DIR
+        original_repo_dir = ui_server.REPO_DIR
+
+        with TemporaryDirectory() as tmpdir:
+            model_dir = ui_server.Path(tmpdir) / "data" / "models"
+            model_dir.mkdir(parents=True)
+            (model_dir / "a_mlx.safetensors").write_bytes(b"")
+            (model_dir / "b.pt2").write_bytes(b"")
+
+            ui_server.REPO_DIR = ui_server.Path(tmpdir)
+            ui_server.NEURAL_MODEL_DIR = model_dir
+            try:
+                models = ui_server.neural_model_options()
+            finally:
+                ui_server.REPO_DIR = original_repo_dir
+                ui_server.NEURAL_MODEL_DIR = original_model_dir
+
+        self.assertEqual(
+            models,
+            [{"label": "a_mlx.safetensors", "path": "data/models/a_mlx.safetensors"}],
+        )
+
     def test_session_action_reset_and_undo(self) -> None:
         session = GameSession()
 
@@ -61,6 +85,8 @@ class UiServerTest(unittest.TestCase):
             engine="random",
             puct_prior=None,
             puct_rollout=None,
+            neural_model=None,
+            neural_backend=None,
         ):
             seen_early_win_flags.append(state.early_win_enabled)
             return {
@@ -119,7 +145,14 @@ class UiServerTest(unittest.TestCase):
     def test_session_suggest_action_falls_back_to_python_mcts(self) -> None:
         original = ui_server.suggest_with_cpp_mcts
         ui_server.suggest_with_cpp_mcts = (
-            lambda state, simulations, seed=1, engine="random", puct_prior=None, puct_rollout=None: None
+            lambda state,
+            simulations,
+            seed=1,
+            engine="random",
+            puct_prior=None,
+            puct_rollout=None,
+            neural_model=None,
+            neural_backend=None: None
         )
         try:
             payload = GameSession().suggest_action(simulations=4)
@@ -140,6 +173,8 @@ class UiServerTest(unittest.TestCase):
             engine="random",
             puct_prior=None,
             puct_rollout=None,
+            neural_model=None,
+            neural_backend=None,
         ):
             seeds.append(seed)
             return {
@@ -172,6 +207,8 @@ class UiServerTest(unittest.TestCase):
             engine="random",
             puct_prior=None,
             puct_rollout=None,
+            neural_model=None,
+            neural_backend=None,
         ):
             calls.append((engine, puct_prior, puct_rollout))
             return {
@@ -200,10 +237,61 @@ class UiServerTest(unittest.TestCase):
         self.assertEqual(payload["suggestion"]["puct_rollout"], "biased")
         self.assertEqual(payload["suggestion"]["engine"], "cpp/puct/prior=flat/rollout=biased")
 
+    def test_session_suggest_action_passes_neural_options(self) -> None:
+        original = ui_server.suggest_with_cpp_mcts
+        calls = []
+
+        def fake_cpp_suggest(
+            state,
+            simulations,
+            seed=1,
+            engine="random",
+            puct_prior=None,
+            puct_rollout=None,
+            neural_model=None,
+            neural_backend=None,
+        ):
+            calls.append((engine, neural_model, neural_backend))
+            return {
+                "action": 0,
+                "choices": [{"action": 0, "visits": simulations, "value": 0.0}],
+                "engine": engine,
+                "state_mode": "tracked",
+            }
+
+        ui_server.suggest_with_cpp_mcts = fake_cpp_suggest
+        try:
+            with TemporaryDirectory() as tmpdir:
+                model_path = f"{tmpdir}/model.safetensors"
+                open(model_path, "wb").close()
+
+                payload = GameSession().suggest_action(
+                    simulations=4,
+                    solver="neural-puct",
+                    neural_model=model_path,
+                    neural_backend="mlx",
+                )
+        finally:
+            ui_server.suggest_with_cpp_mcts = original
+
+        self.assertEqual(calls, [("neural-puct", model_path, "mlx")])
+        self.assertEqual(payload["suggestion"]["solver"], "neural-puct")
+        self.assertEqual(payload["suggestion"]["neural_model"], model_path)
+        self.assertEqual(payload["suggestion"]["neural_backend"], "mlx")
+        self.assertNotIn("neural_batch_size", payload["suggestion"])
+        self.assertEqual(payload["suggestion"]["engine"], "cpp/neural-puct/backend=mlx")
+
     def test_session_suggest_action_rejects_puct_without_cpp(self) -> None:
         original = ui_server.suggest_with_cpp_mcts
         ui_server.suggest_with_cpp_mcts = (
-            lambda state, simulations, seed=1, engine="random", puct_prior=None, puct_rollout=None: None
+            lambda state,
+            simulations,
+            seed=1,
+            engine="random",
+            puct_prior=None,
+            puct_rollout=None,
+            neural_model=None,
+            neural_backend=None: None
         )
         try:
             with self.assertRaises(RuntimeError):

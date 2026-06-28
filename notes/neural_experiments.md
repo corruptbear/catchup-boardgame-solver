@@ -591,3 +591,11 @@ iter_0080 vs heuristic puct:10000 neural-puct:200      1    128  max/max        
 iter_0080 vs heuristic puct:10000 neural-puct:200 100001    128  max/max           89-39       69.5%     45-19        44-20     154.61s
 iter_0080 vs heuristic puct:10000 neural-puct:200 200001    128  max/max           91-37       71.1%     51-13        40-24     154.20s
 ```
+
+Direct neural-vs-neural check after arena seed hashing fix:
+
+```text
+model matchup                           search           seed  games  action selection  result   score rate  A Blue  A White  real
+Exp6 h128 iter_0080 vs Exp5 h64 iter_0080 neural-puct:200      1    256  sample/sample    123-133      48.0%   59-69   64-64   158.62s
+Exp6 h128 iter_0080 vs Exp3 h64 iter_0012 neural-puct:200      1    256  sample/sample    142-114      55.5%   67-61   75-53   169.81s
+```

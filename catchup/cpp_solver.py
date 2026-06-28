@@ -29,6 +29,8 @@ def cpp_solver_args(
     engine: str = "random",
     puct_prior: str | None = None,
     puct_rollout: str | None = None,
+    neural_model: str | None = None,
+    neural_backend: str | None = None,
 ) -> list[str]:
     """Build argv for the C++ solver from a Python game state."""
 
@@ -58,6 +60,10 @@ def cpp_solver_args(
         args.extend(["--puct-prior", puct_prior])
     if puct_rollout is not None:
         args.extend(["--puct-rollout", puct_rollout])
+    if neural_model is not None:
+        args.extend(["--model", neural_model])
+    if neural_backend is not None:
+        args.extend(["--neural-backend", neural_backend])
     return args
 
 
@@ -68,6 +74,8 @@ def suggest_with_cpp_mcts(
     engine: str = "random",
     puct_prior: str | None = None,
     puct_rollout: str | None = None,
+    neural_model: str | None = None,
+    neural_backend: str | None = None,
 ) -> dict[str, Any] | None:
     """Return C++ MCTS JSON output, or None when the binary is not built."""
 
@@ -77,14 +85,26 @@ def suggest_with_cpp_mcts(
 
     command = [
         str(binary),
-        *cpp_solver_args(state, simulations, seed, engine, puct_prior, puct_rollout),
+        *cpp_solver_args(
+            state,
+            simulations,
+            seed,
+            engine,
+            puct_prior,
+            puct_rollout,
+            neural_model,
+            neural_backend,
+        ),
     ]
+    timeout = max(5.0, simulations / 100.0)
+    if engine == "neural-puct":
+        timeout = max(30.0, simulations / 2.0)
     completed = subprocess.run(
         command,
         capture_output=True,
         check=False,
         text=True,
-        timeout=max(5.0, simulations / 100.0),
+        timeout=timeout,
     )
     if completed.returncode != 0:
         stderr = completed.stderr.strip()

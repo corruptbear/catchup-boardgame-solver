@@ -41,6 +41,23 @@ class CppSolverTest(unittest.TestCase):
         self.assertEqual(args[args.index("--puct-prior") + 1], "flat")
         self.assertEqual(args[args.index("--puct-rollout") + 1], "biased")
 
+    def test_cpp_solver_args_include_neural_options(self) -> None:
+        state = GameState.new()
+
+        args = cpp_solver_args(
+            state,
+            simulations=7,
+            seed=3,
+            engine="neural-puct",
+            neural_model="data/models/model.safetensors",
+            neural_backend="mlx",
+        )
+
+        self.assertEqual(args[args.index("--engine") + 1], "neural-puct")
+        self.assertEqual(args[args.index("--model") + 1], "data/models/model.safetensors")
+        self.assertEqual(args[args.index("--neural-backend") + 1], "mlx")
+        self.assertNotIn("--neural-batch-size", args)
+
     def test_cpp_solver_returns_legal_action_when_built(self) -> None:
         if find_cpp_solver() is None:
             self.skipTest("C++ solver binary is not built")

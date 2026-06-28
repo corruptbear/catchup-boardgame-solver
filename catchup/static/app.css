@@ -19,6 +19,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -76,6 +80,7 @@ select {
 }
 
 .board-area {
+  align-self: start;
   display: grid;
   grid-template-rows: auto 1fr;
   min-height: 680px;
@@ -125,23 +130,6 @@ h2 {
   justify-content: flex-end;
 }
 
-.zoom-control {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
-.zoom-control span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.zoom-control input {
-  width: 120px;
-}
-
 #finish-button:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
@@ -153,7 +141,8 @@ h2 {
   min-height: 590px;
   justify-self: center;
   max-width: 100%;
-  width: var(--board-zoom, 100%);
+  touch-action: none;
+  width: 100%;
 }
 
 .side-panel {
@@ -196,11 +185,19 @@ dd {
   margin-bottom: 10px;
 }
 
+.group-row {
+  display: flex;
+}
+
+.group-row + .group-row {
+  margin-top: 8px;
+}
+
 .groups {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  min-height: 30px;
+  min-height: 28px;
 }
 
 .group-chip {
@@ -209,9 +206,10 @@ dd {
   display: inline-flex;
   font-size: 13px;
   font-weight: 750;
-  min-width: 30px;
+  height: 28px;
   justify-content: center;
-  padding: 5px 9px;
+  padding: 0;
+  width: 28px;
 }
 
 .player-blue .group-chip {
@@ -286,10 +284,39 @@ dd {
   text-transform: uppercase;
 }
 
+.suggestion-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.suggestion-tab {
+  font-size: 13px;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.suggestion-tab.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
 .puct-controls {
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr 1fr;
+}
+
+.neural-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.neural-options {
+  display: grid;
+  gap: 8px;
 }
 
 #suggestion-output {

@@ -15,10 +15,6 @@
             <p id="status-line"></p>
           </div>
           <div class="actions">
-            <label class="zoom-control" for="board-zoom">
-              <span>Zoom</span>
-              <input id="board-zoom" type="range" min="60" max="120" step="5" value="100">
-            </label>
             <button id="finish-button" type="button">Finish turn</button>
             <button id="undo-button" type="button">Undo</button>
             <button id="reset-button" type="button">Reset</button>
@@ -28,44 +24,14 @@
       </section>
 
       <aside class="side-panel">
-        <section class="turn-panel">
-          <h2>Turn</h2>
-          <dl>
-            <div>
-              <dt>Player</dt>
-              <dd id="current-player"></dd>
-            </div>
-            <div>
-              <dt>Claims</dt>
-              <dd id="claim-count"></dd>
-            </div>
-            <div>
-              <dt>Empty</dt>
-              <dd id="empty-count"></dd>
-            </div>
-            <div>
-              <dt>Turns</dt>
-              <dd id="turn-count"></dd>
-            </div>
-          </dl>
-        </section>
-
-        <section class="score-panel player-blue">
-          <h2>Blue Groups</h2>
-          <div class="largest" id="blue-largest"></div>
-          <div class="groups" id="blue-groups"></div>
-        </section>
-
-        <section class="score-panel player-white">
-          <h2>White Groups</h2>
-          <div class="largest" id="white-largest"></div>
-          <div class="groups" id="white-groups"></div>
-        </section>
-
-        <section class="empty-panel">
-          <h2>Empty Regions</h2>
-          <div class="largest" id="empty-summary"></div>
-          <div class="empty-regions" id="empty-regions"></div>
+        <section class="groups-panel">
+          <h2>Groups</h2>
+          <div class="group-row player-blue">
+            <div class="groups" id="blue-groups"></div>
+          </div>
+          <div class="group-row player-white">
+            <div class="groups" id="white-groups"></div>
+          </div>
         </section>
 
         <section class="suggestion-panel">
@@ -74,13 +40,7 @@
             <span>Simulations</span>
             <input id="simulation-input" type="number" min="1" step="1" value="100">
           </label>
-          <label class="simulation-control" for="solver-select">
-            <span>Solver</span>
-            <select id="solver-select">
-              <option value="mcts">UCT MCTS</option>
-              <option value="puct">PUCT MCTS</option>
-            </select>
-          </label>
+          <div id="suggestion-tabs" class="suggestion-tabs" role="tablist" aria-label="Suggestion model"></div>
           <div class="puct-controls">
             <label class="simulation-control" for="puct-prior-select">
               <span>PUCT prior</span>
@@ -97,9 +57,25 @@
               </select>
             </label>
           </div>
+          <div class="neural-controls">
+            <label class="simulation-control" for="neural-model-select">
+              <span>Model</span>
+              <select id="neural-model-select">
+                <option value="data/models/directional_cnn_h128_tanh_margin_random_init_adamw_wd1e4_iter_0080_npuct200_replay_mlx.safetensors">
+                  directional_cnn_h128_tanh_margin_random_init_adamw_wd1e4_iter_0080_npuct200_replay_mlx.safetensors
+                </option>
+              </select>
+            </label>
+          </div>
           <button id="suggestion-button" type="button">Get suggested action</button>
           <p id="suggestion-output"></p>
           <div id="suggestion-choices" class="suggestion-choices"></div>
+        </section>
+
+        <section class="empty-panel">
+          <h2>Empty Regions</h2>
+          <div class="largest" id="empty-summary"></div>
+          <div class="empty-regions" id="empty-regions"></div>
         </section>
 
         <section class="message-panel">

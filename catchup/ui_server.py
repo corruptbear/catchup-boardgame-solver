@@ -6,6 +6,7 @@ import argparse
 import json
 import mimetypes
 import random
+import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,16 +21,31 @@ from .solvers import MCTSPlayer
 
 
 STATIC_DIR = Path(__file__).with_name("static")
+REPO_DIR = Path(__file__).resolve().parent.parent
 SUGGESTION_SIMULATIONS = 100
 SUGGESTION_SEED_RNG = random.SystemRandom()
 SOLVER_MCTS = "mcts"
 SOLVER_PUCT = "puct"
+SOLVER_NEURAL_PUCT = "neural-puct"
+DEFAULT_NEURAL_MODEL = (
+    "data/models/"
+    "directional_cnn_h128_tanh_margin_random_init_adamw_wd1e4_iter_0080_npuct200_replay_mlx.safetensors"
+)
+NEURAL_MODEL_DIR = REPO_DIR / "data" / "models"
 PUCT_PRIORS = {"flat", "heuristic"}
 PUCT_ROLLOUTS = {"flat", "biased"}
+NEURAL_BACKENDS = {"mlx", "aoti"}
 PLAYER_NAMES = {
     PLAYER_ONE: "Blue",
     PLAYER_TWO: "White",
 }
+
+
+def _neural_model_sort_key(path: Path) -> tuple[int, int, str]:
+    iteration_match = re.search(r"iter_(\d+)", path.name)
+    iteration = int(iteration_match.group(1)) if iteration_match else -1
+    width = 128 if "_h128_" in path.name else 64 if "_h64_" in path.name else 0
+    return (iteration, width, path.name)
 
 
 def state_payload(state: GameState, message: str = "") -> dict[str, Any]:
@@ -104,6 +120,23 @@ def _claimed_component_refs(
             "size": state.tracker.sizes[root],
         }
         for root in roots
+    ]
+
+
+def neural_model_options() -> list[dict[str, str]]:
+    if not NEURAL_MODEL_DIR.is_dir():
+        return []
+    models = sorted(
+        NEURAL_MODEL_DIR.glob("*_mlx.safetensors"),
+        key=_neural_model_sort_key,
+        reverse=True,
+    )
+    return [
+        {
+            "label": path.name,
+            "path": str(path.relative_to(REPO_DIR)),
+        }
+        for path in models
     ]
 
 
@@ -213,31 +246,53 @@ class GameSession:
         solver: str = SOLVER_MCTS,
         puct_prior: str = "heuristic",
         puct_rollout: str = "biased",
+        neural_model: str = DEFAULT_NEURAL_MODEL,
+        neural_backend: str = "mlx",
     ) -> dict[str, Any]:
         if simulations <= 0:
             raise ValueError("simulations must be positive")
-        if solver not in {SOLVER_MCTS, SOLVER_PUCT}:
-            raise ValueError("solver must be mcts or puct")
+        if solver not in {SOLVER_MCTS, SOLVER_PUCT, SOLVER_NEURAL_PUCT}:
+            raise ValueError("solver must be mcts, puct, or neural-puct")
         if puct_prior not in PUCT_PRIORS:
             raise ValueError("puct prior must be flat or heuristic")
         if puct_rollout not in PUCT_ROLLOUTS:
             raise ValueError("puct rollout must be flat or biased")
+        if neural_backend not in NEURAL_BACKENDS:
+            raise ValueError("neural backend must be mlx or aoti")
+
+        resolved_neural_model: Path | None = None
+        if solver == SOLVER_NEURAL_PUCT:
+            neural_model = neural_model.strip()
+            if not neural_model:
+                raise ValueError("neural model path is required")
+            resolved_neural_model = Path(neural_model).expanduser()
+            if not resolved_neural_model.is_absolute():
+                resolved_neural_model = REPO_DIR / resolved_neural_model
+            if not resolved_neural_model.is_file():
+                raise ValueError(f"neural model file does not exist: {neural_model}")
 
         with self._lock:
             state = self._state.copy()
 
         seed = SUGGESTION_SEED_RNG.randrange(1, 2**63)
+        engine = "random"
+        if solver == SOLVER_PUCT:
+            engine = "puct"
+        elif solver == SOLVER_NEURAL_PUCT:
+            engine = "neural-puct"
         cpp_result = suggest_with_cpp_mcts(
             state,
             simulations,
             seed=seed,
-            engine="puct" if solver == SOLVER_PUCT else "random",
+            engine=engine,
             puct_prior=puct_prior if solver == SOLVER_PUCT else None,
             puct_rollout=puct_rollout if solver == SOLVER_PUCT else None,
+            neural_model=str(resolved_neural_model) if resolved_neural_model else None,
+            neural_backend=neural_backend if solver == SOLVER_NEURAL_PUCT else None,
         )
         if cpp_result is None:
-            if solver == SOLVER_PUCT:
-                raise RuntimeError("PUCT suggestions require the C++ solver binary")
+            if solver in {SOLVER_PUCT, SOLVER_NEURAL_PUCT}:
+                raise RuntimeError(f"{solver} suggestions require the C++ solver binary")
             engine = "python"
             player = MCTSPlayer(simulations=simulations, rng=random.Random(seed))
             root = player.search(state)
@@ -256,6 +311,8 @@ class GameSession:
                     f"/prior={cpp_result.get('puct_prior', puct_prior)}"
                     f"/rollout={cpp_result.get('puct_rollout', puct_rollout)}"
                 )
+            elif cpp_result.get("engine") == "neural-puct":
+                engine = f"cpp/neural-puct/backend={neural_backend}"
             else:
                 engine = "cpp/mcts"
             choices = [
@@ -273,6 +330,9 @@ class GameSession:
         if solver == SOLVER_PUCT:
             suggestion["puct_prior"] = puct_prior
             suggestion["puct_rollout"] = puct_rollout
+        elif solver == SOLVER_NEURAL_PUCT:
+            suggestion["neural_model"] = neural_model
+            suggestion["neural_backend"] = neural_backend
         suggestion["seed"] = seed
 
         with self._lock:
@@ -331,6 +391,8 @@ class CatchupRequestHandler(BaseHTTPRequestHandler):
             self._send_file(STATIC_DIR / "app.js")
         elif self.path == "/api/state":
             self._send_json(self.session.payload())
+        elif self.path == "/api/models":
+            self._send_json({"models": neural_model_options()})
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -345,12 +407,16 @@ class CatchupRequestHandler(BaseHTTPRequestHandler):
                 solver = str(data.get("solver", SOLVER_MCTS))
                 puct_prior = str(data.get("puct_prior", "heuristic"))
                 puct_rollout = str(data.get("puct_rollout", "biased"))
+                neural_model = str(data.get("neural_model", DEFAULT_NEURAL_MODEL))
+                neural_backend = str(data.get("neural_backend", "mlx"))
                 self._send_json(
                     self.session.suggest_action(
                         simulations,
                         solver=solver,
                         puct_prior=puct_prior,
                         puct_rollout=puct_rollout,
+                        neural_model=neural_model,
+                        neural_backend=neural_backend,
                     )
                 )
             elif self.path == "/api/reset":
