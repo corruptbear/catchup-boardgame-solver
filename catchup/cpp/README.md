@@ -99,13 +99,17 @@ Arena options:
 --neural-device cpu|mps   device for neural AOTI inference; default mps
 --neural-batch-size N     fixed neural eval batch size; default 32
 --neural-batch-wait-ms N  max wait to gather a neural batch; default 0.5
---agent-a-neural-value-target win-loss|tanh-margin-scale6
---agent-b-neural-value-target win-loss|tanh-margin-scale6
+--agent-a-neural-value-target win-loss|tanh-margin-scale6|dual-win-margin
+--agent-b-neural-value-target win-loss|tanh-margin-scale6|dual-win-margin
                  terminal leaf value for neural PUCT; inferred from model path
                  by default, with tanh_margin/tanh-margin using tanh-margin-scale6
+--agent-a-neural-margin-beta N
+--agent-b-neural-margin-beta N
+                 dual-win-margin search uses Q = win_q + beta * margin_q;
+                 default 0.1
 --early-win true|false
                  arena terminal rule; default false when either neural agent uses
-                 tanh-margin-scale6, true otherwise
+                 tanh-margin-scale6 or dual-win-margin, true otherwise
 --json           print full JSON records instead of the text summary
 ```
 
@@ -161,9 +165,11 @@ Options:
 --neural-device cpu|mps   device for neural AOTI inference; default mps
 --neural-batch-size N     fixed neural eval batch size; default 32
 --neural-batch-wait-ms N  max wait to gather a batch; default 0.5
---neural-value-target win-loss|tanh-margin-scale6
+--neural-value-target win-loss|tanh-margin-scale6|dual-win-margin
                           terminal leaf value for neural PUCT; inferred from
                           model path by default
+--neural-margin-beta N    dual-win-margin search uses Q = win_q + beta * margin_q;
+                          default 0.1
 --profile-neural-batch 1  print neural batch timing stats to stderr
 --root-noise-epsilon N    opening neural root noise weight; default 0.25
 --root-dirichlet-total-concentration N

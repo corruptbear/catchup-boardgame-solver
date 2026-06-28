@@ -23,6 +23,7 @@ enum class NeuralBackend {
 enum class NeuralValueTarget {
     WinLoss,
     TanhMarginScale6,
+    DualWinLossTanhMargin,
 };
 
 NeuralDevice parse_neural_device(const std::string& text);
@@ -35,7 +36,8 @@ NeuralValueTarget infer_neural_value_target_from_model_path(const std::string& m
 
 struct NeuralEvaluation {
     std::array<double, kMaxActions> priors{};
-    double value = 0.0;
+    double win_value = 0.0;
+    double margin_value = 0.0;
     int player = kPlayerOne;
 };
 
@@ -70,6 +72,7 @@ struct NeuralPuctConfig {
     double root_noise_reference_actions = kCellCount;
     double root_noise_action_power = 0.5;
     double root_noise_empty_power = 1.0;
+    double margin_q_beta = 0.1;
     NeuralValueTarget value_target = NeuralValueTarget::WinLoss;
 };
 
@@ -91,7 +94,8 @@ std::vector<NeuralEvaluation> build_neural_evaluations(
     const std::vector<TrackedState>& states,
     const std::vector<ActionList>& legal_actions,
     const float* all_logits,
-    const float* values);
+    const float* win_values,
+    const float* margin_values);
 
 std::unique_ptr<NeuralBatchModel> make_aoti_neural_batch_model(
     const std::string& package_path,
@@ -149,7 +153,8 @@ public:
 private:
     struct LeafEvaluation {
         std::vector<PuctNode*> path;
-        double value = 0.0;
+        double win_value = 0.0;
+        double margin_value = 0.0;
         int player = kPlayerOne;
     };
 
@@ -160,9 +165,12 @@ private:
     void add_root_dirichlet_noise(PuctNode* root);
     static void backpropagate(
         const std::vector<PuctNode*>& path,
-        double value,
+        double win_value,
+        double margin_value,
         int value_player);
     static double mean_value_for_player(const PuctNode* node, int player);
+    static double mean_margin_value_for_player(const PuctNode* node, int player);
+    double search_value_for_player(const PuctNode* node, int player) const;
 
     int simulations_;
     std::mt19937_64 rng_;

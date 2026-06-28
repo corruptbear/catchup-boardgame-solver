@@ -366,7 +366,7 @@ function renderBoard() {
   const minY = Math.min(...centers.map((item) => item.y));
   const maxY = Math.max(...centers.map((item) => item.y));
   const marginX = 48;
-  const marginY = 8;
+  const marginY = 38;
   const width = maxX - minX + marginX * 2;
   const height = maxY - minY + marginY * 2;
   const legal = legalSet();

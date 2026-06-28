@@ -40,8 +40,10 @@ MLP_ARCHITECTURE = "mlp"
 GNN_ARCHITECTURE = "gnn"
 DIRECTIONAL_CNN_ARCHITECTURE = "directional-cnn"
 DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE = "directional-cnn-tanh-margin"
+DIRECTIONAL_CNN_DUAL_VALUE_ARCHITECTURE = "directional-cnn-dual-value"
 WIN_LOSS_VALUE_TARGET = "win-loss"
 TANH_MARGIN_VALUE_TARGET = "tanh-margin-scale6"
+DUAL_VALUE_TARGET = "win-loss+tanh-margin-scale6"
 TANH_MARGIN_SCALE = 6.0
 GRID_WIDTH = BOARD.radius * 2 + 1
 GRID_CELL_COUNT = GRID_WIDTH * GRID_WIDTH
@@ -65,6 +67,7 @@ class TrainConfig:
     optimizer: str = "adam"
     weight_decay: float = 0.0
     value_weight: float = 1.0
+    margin_value_weight: float = 1.0
     symmetry_copies: int = 3
     seed: int = 1
     device: str = "auto"
@@ -196,8 +199,15 @@ class HexDirectionalBlock(nn.Module):
 class HexDirectionalCnnPolicyValueNet(nn.Module):
     """Directional CNN over the six axial directions of the radius-4 hex board."""
 
-    def __init__(self, hidden_size: int = 128, cnn_layers: int = 4) -> None:
+    def __init__(
+        self,
+        hidden_size: int = 128,
+        cnn_layers: int = 4,
+        *,
+        dual_value: bool = False,
+    ) -> None:
         super().__init__()
+        self.dual_value = dual_value
         input_channels = CELL_FEATURE_COUNT + 1 + GLOBAL_FEATURE_COUNT + 1
         self.input_projection = nn.Conv2d(input_channels, hidden_size, kernel_size=1)
         self.blocks = nn.ModuleList(HexDirectionalBlock(hidden_size) for _ in range(cnn_layers))
@@ -208,11 +218,11 @@ class HexDirectionalCnnPolicyValueNet(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
         )
-        self.value_head = nn.Sequential(
-            nn.Linear(hidden_size * 2, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, 1),
-        )
+        if dual_value:
+            self.win_value_head = self._make_value_head(hidden_size)
+            self.margin_value_head = self._make_value_head(hidden_size)
+        else:
+            self.value_head = self._make_value_head(hidden_size)
         cell_to_grid = _cell_to_grid_matrix()
         self.register_buffer("cell_to_grid", cell_to_grid)
         self.register_buffer("grid_to_cell", cell_to_grid.transpose(0, 1))
@@ -220,7 +230,15 @@ class HexDirectionalCnnPolicyValueNet(nn.Module):
         self.register_buffer("valid_mask", _valid_grid_mask())
         self.reset_parameters()
 
-    def forward(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    @staticmethod
+    def _make_value_head(hidden_size: int) -> nn.Sequential:
+        return nn.Sequential(
+            nn.Linear(hidden_size * 2, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1),
+        )
+
+    def forward(self, features: torch.Tensor) -> tuple[torch.Tensor, ...]:
         batch_size = features.shape[0]
         cell_flags = features[:, :LEGAL_MASK_OFFSET].reshape(
             batch_size,
@@ -263,6 +281,10 @@ class HexDirectionalCnnPolicyValueNet(nn.Module):
         claim_logits = claim_grid.index_select(1, self.cell_grid_indices)
         finish_logit = self.finish_policy_scorer(combined)
         policy_logits = torch.cat((claim_logits, finish_logit), dim=1)
+        if self.dual_value:
+            win_value = torch.tanh(self.win_value_head(combined)).squeeze(-1)
+            margin_value = torch.tanh(self.margin_value_head(combined)).squeeze(-1)
+            return policy_logits, win_value, margin_value
         value = torch.tanh(self.value_head(combined)).squeeze(-1)
         return policy_logits, value
 
@@ -277,8 +299,14 @@ class HexDirectionalCnnPolicyValueNet(nn.Module):
         nn.init.zeros_(self.claim_policy_scorer.bias)
         nn.init.normal_(self.finish_policy_scorer[-1].weight, mean=0.0, std=0.01)
         nn.init.zeros_(self.finish_policy_scorer[-1].bias)
-        nn.init.normal_(self.value_head[-1].weight, mean=0.0, std=0.01)
-        nn.init.zeros_(self.value_head[-1].bias)
+        value_heads = (
+            (self.win_value_head, self.margin_value_head)
+            if self.dual_value
+            else (self.value_head,)
+        )
+        for value_head in value_heads:
+            nn.init.normal_(value_head[-1].weight, mean=0.0, std=0.01)
+            nn.init.zeros_(value_head[-1].bias)
 
 
 def _neighbor_matrix() -> torch.Tensor:
@@ -350,10 +378,18 @@ def build_model(
         DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE,
     ):
         return HexDirectionalCnnPolicyValueNet(hidden_size=hidden_size, cnn_layers=cnn_layers)
+    if architecture == DIRECTIONAL_CNN_DUAL_VALUE_ARCHITECTURE:
+        return HexDirectionalCnnPolicyValueNet(
+            hidden_size=hidden_size,
+            cnn_layers=cnn_layers,
+            dual_value=True,
+        )
     raise ValueError(f"unknown architecture: {architecture}")
 
 
 def value_target_kind_for_architecture(architecture: str) -> str:
+    if architecture == DIRECTIONAL_CNN_DUAL_VALUE_ARCHITECTURE:
+        return DUAL_VALUE_TARGET
     if architecture == DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE:
         return TANH_MARGIN_VALUE_TARGET
     return WIN_LOSS_VALUE_TARGET
@@ -389,7 +425,7 @@ def sample_to_arrays(
     sample: dict[str, Any],
     *,
     value_target_kind: str = WIN_LOSS_VALUE_TARGET,
-) -> tuple[np.ndarray, np.ndarray, np.float32]:
+) -> tuple[np.ndarray, np.ndarray, np.float32 | np.ndarray]:
     """Convert one JSONL sample into feature, policy target, and value target."""
 
     state = sample["state"]
@@ -426,8 +462,23 @@ def sample_to_arrays(
     return (
         features,
         np.asarray(sample["policy_target"], dtype=np.float32),
-        value_target_from_sample(sample, value_target_kind),
+        value_targets_from_sample(sample, value_target_kind),
     )
+
+
+def value_targets_from_sample(
+    sample: dict[str, Any],
+    value_target_kind: str,
+) -> np.float32 | np.ndarray:
+    if value_target_kind == DUAL_VALUE_TARGET:
+        return np.asarray(
+            [
+                value_target_from_sample(sample, WIN_LOSS_VALUE_TARGET),
+                value_target_from_sample(sample, TANH_MARGIN_VALUE_TARGET),
+            ],
+            dtype=np.float32,
+        )
+    return value_target_from_sample(sample, value_target_kind)
 
 
 def value_target_from_sample(
@@ -438,6 +489,8 @@ def value_target_from_sample(
         return np.float32(sample["value_target"])
     if value_target_kind == TANH_MARGIN_VALUE_TARGET:
         return terminal_tanh_margin_value_target(sample)
+    if value_target_kind == DUAL_VALUE_TARGET:
+        raise ValueError("use value_targets_from_sample for dual value targets")
     raise ValueError(f"unknown value target kind: {value_target_kind}")
 
 
@@ -564,14 +617,53 @@ def sample_replay_batch(
 
 def policy_value_loss(
     policy_logits: torch.Tensor,
-    value: torch.Tensor,
+    value_outputs: tuple[torch.Tensor, ...],
     policy_target: torch.Tensor,
     value_target: torch.Tensor,
     value_weight: float,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    margin_value_weight: float,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     policy_loss = -(policy_target * F.log_softmax(policy_logits, dim=1)).sum(dim=1).mean()
-    value_loss = F.mse_loss(value, value_target)
-    return policy_loss + value_weight * value_loss, policy_loss, value_loss
+    if len(value_outputs) == 1:
+        target = value_target
+        if target.ndim == 2:
+            target = target[:, 0]
+        value_loss = F.mse_loss(value_outputs[0], target)
+        return (
+            policy_loss + value_weight * value_loss,
+            {
+                "policy_loss": policy_loss,
+                "value_loss": value_loss,
+            },
+        )
+    if len(value_outputs) == 2:
+        if value_target.ndim != 2 or value_target.shape[1] != 2:
+            raise ValueError("dual value model requires two value targets")
+        win_value_loss = F.mse_loss(value_outputs[0], value_target[:, 0])
+        margin_value_loss = F.mse_loss(value_outputs[1], value_target[:, 1])
+        value_loss = win_value_loss + margin_value_loss
+        return (
+            policy_loss
+            + value_weight * win_value_loss
+            + margin_value_weight * margin_value_loss,
+            {
+                "policy_loss": policy_loss,
+                "value_loss": value_loss,
+                "win_value_loss": win_value_loss,
+                "margin_value_loss": margin_value_loss,
+            },
+        )
+    raise ValueError("model must return one or two value outputs")
+
+
+def split_model_outputs(outputs: tuple[torch.Tensor, ...]) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
+    if len(outputs) < 2:
+        raise ValueError("model must return policy logits and at least one value")
+    return outputs[0], tuple(outputs[1:])
+
+
+def first_value_target(value_target: torch.Tensor) -> torch.Tensor:
+    return value_target if value_target.ndim == 1 else value_target[:, 0]
 
 
 def make_optimizer(config: TrainConfig, model: nn.Module) -> torch.optim.Optimizer:
@@ -594,6 +686,7 @@ def evaluate(
     batch_size: int,
     device: torch.device,
     value_weight: float,
+    margin_value_weight: float,
 ) -> dict[str, float]:
     model.eval()
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
@@ -609,23 +702,24 @@ def evaluate(
         features = features.to(device)
         policy_target = policy_target.to(device)
         value_target = value_target.to(device)
-        policy_logits, value = model(features)
-        loss, policy_loss, value_loss = policy_value_loss(
+        policy_logits, value_outputs = split_model_outputs(model(features))
+        loss, losses = policy_value_loss(
             policy_logits,
-            value,
+            value_outputs,
             policy_target,
             value_target,
             value_weight,
+            margin_value_weight,
         )
         batch_size_actual = features.shape[0]
         target_action = policy_target.argmax(dim=1)
         predicted_action = policy_logits.argmax(dim=1)
-        value_prediction = torch.sign(value)
-        value_target_sign = torch.sign(value_target)
+        value_prediction = torch.sign(value_outputs[0])
+        value_target_sign = torch.sign(first_value_target(value_target))
         count += batch_size_actual
         totals["loss"] += float(loss.item()) * batch_size_actual
-        totals["policy_loss"] += float(policy_loss.item()) * batch_size_actual
-        totals["value_loss"] += float(value_loss.item()) * batch_size_actual
+        for name, metric in losses.items():
+            totals[name] = totals.get(name, 0.0) + float(metric.item()) * batch_size_actual
         totals["policy_top1"] += float((predicted_action == target_action).float().mean().item()) * batch_size_actual
         totals["value_accuracy"] += (
             float((value_prediction == value_target_sign).float().mean().item())
@@ -693,13 +787,14 @@ def train(config: TrainConfig) -> dict[str, Any]:
             policy_target = policy_target.to(device)
             value_target = value_target.to(device)
             optimizer.zero_grad(set_to_none=True)
-            policy_logits, value = model(features)
-            loss, _, _ = policy_value_loss(
+            policy_logits, value_outputs = split_model_outputs(model(features))
+            loss, _ = policy_value_loss(
                 policy_logits,
-                value,
+                value_outputs,
                 policy_target,
                 value_target,
                 config.value_weight,
+                config.margin_value_weight,
             )
             loss.backward()
             optimizer.step()
@@ -710,6 +805,7 @@ def train(config: TrainConfig) -> dict[str, Any]:
             batch_size=config.batch_size,
             device=device,
             value_weight=config.value_weight,
+            margin_value_weight=config.margin_value_weight,
         )
         validation_metrics = evaluate(
             model,
@@ -717,6 +813,7 @@ def train(config: TrainConfig) -> dict[str, Any]:
             batch_size=config.batch_size,
             device=device,
             value_weight=config.value_weight,
+            margin_value_weight=config.margin_value_weight,
         )
         record = {
             "epoch": epoch,
@@ -785,11 +882,7 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
     optimizer = make_optimizer(config, model)
 
     generation_counts = [0] * len(generations)
-    totals = {
-        "loss": 0.0,
-        "policy_loss": 0.0,
-        "value_loss": 0.0,
-    }
+    totals: dict[str, float] = {"loss": 0.0}
     sampled_positions = train_batches * config.batch_size
     started = time.time()
 
@@ -819,20 +912,21 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
         policy_target = policy_target.to(device)
         value_target = value_target.to(device)
         optimizer.zero_grad(set_to_none=True)
-        policy_logits, value = model(features)
-        loss, policy_loss, value_loss = policy_value_loss(
+        policy_logits, value_outputs = split_model_outputs(model(features))
+        loss, losses = policy_value_loss(
             policy_logits,
-            value,
+            value_outputs,
             policy_target,
             value_target,
             config.value_weight,
+            config.margin_value_weight,
         )
         loss.backward()
         optimizer.step()
 
         totals["loss"] += float(loss.item()) * config.batch_size
-        totals["policy_loss"] += float(policy_loss.item()) * config.batch_size
-        totals["value_loss"] += float(value_loss.item()) * config.batch_size
+        for name, metric in losses.items():
+            totals[name] = totals.get(name, 0.0) + float(metric.item()) * config.batch_size
         for index, count in enumerate(batch_counts):
             generation_counts[index] += count
 
@@ -858,6 +952,7 @@ def train_replay(config: TrainConfig) -> dict[str, Any]:
             batch_size=config.batch_size,
             device=device,
             value_weight=config.value_weight,
+            margin_value_weight=config.margin_value_weight,
         )
     print(json.dumps(record, sort_keys=True), flush=True)
 
@@ -890,37 +985,55 @@ def target_distribution_paths(config: TrainConfig) -> list[Path]:
 def inspect_value_target_distribution(config: TrainConfig) -> dict[str, Any]:
     paths = target_distribution_paths(config)
     value_target_kind = value_target_kind_for_architecture(config.architecture)
-    values: list[float] = []
+    values: list[np.ndarray] = []
     for sample in iter_training_samples(
         paths,
         augment_symmetry=False,
         symmetry_copies=1,
         rng=random.Random(config.seed),
     ):
-        values.append(float(value_target_from_sample(sample, value_target_kind)))
+        values.append(np.asarray(value_targets_from_sample(sample, value_target_kind)).reshape(-1))
 
-    array = np.asarray(values, dtype=np.float32)
+    target_names = (
+        ["win_loss", "tanh_margin_scale6"]
+        if value_target_kind == DUAL_VALUE_TARGET
+        else [value_target_kind]
+    )
+    array = (
+        np.stack(values).astype(np.float32)
+        if values
+        else np.empty((0, len(target_names)), dtype=np.float32)
+    )
     quantile_points = (0.0, 0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99, 1.0)
+
+    def summarize_target(column: np.ndarray) -> dict[str, Any]:
+        return {
+            "count": int(column.size),
+            "negative": int((column < 0).sum()),
+            "zero": int((column == 0).sum()),
+            "positive": int((column > 0).sum()),
+            "min": float(column.min()) if column.size else None,
+            "max": float(column.max()) if column.size else None,
+            "mean": float(column.mean()) if column.size else None,
+            "std": float(column.std()) if column.size else None,
+            "mean_abs": float(np.abs(column).mean()) if column.size else None,
+            "quantiles": {
+                f"{point:.2f}": float(np.quantile(column, point))
+                for point in quantile_points
+            } if column.size else {},
+            "abs_quantiles": {
+                f"{point:.2f}": float(np.quantile(np.abs(column), point))
+                for point in quantile_points
+            } if column.size else {},
+        }
+
     return {
         "paths": [str(path) for path in paths],
         "value_target_kind": value_target_kind,
-        "count": int(array.size),
-        "negative": int((array < 0).sum()),
-        "zero": int((array == 0).sum()),
-        "positive": int((array > 0).sum()),
-        "min": float(array.min()) if array.size else None,
-        "max": float(array.max()) if array.size else None,
-        "mean": float(array.mean()) if array.size else None,
-        "std": float(array.std()) if array.size else None,
-        "mean_abs": float(np.abs(array).mean()) if array.size else None,
-        "quantiles": {
-            f"{point:.2f}": float(np.quantile(array, point))
-            for point in quantile_points
-        } if array.size else {},
-        "abs_quantiles": {
-            f"{point:.2f}": float(np.quantile(np.abs(array), point))
-            for point in quantile_points
-        } if array.size else {},
+        "targets": {
+            name: summarize_target(array[:, index])
+            for index, name in enumerate(target_names)
+        },
     }
 
 
@@ -974,6 +1087,7 @@ def save_checkpoint(
         "optimizer": config.optimizer,
         "weight_decay": config.weight_decay,
         "value_weight": config.value_weight,
+        "margin_value_weight": config.margin_value_weight,
         "seed": config.seed,
         "device": str(device),
         "replay_data_glob": config.replay_data_glob,
@@ -1013,6 +1127,7 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
             GNN_ARCHITECTURE,
             DIRECTIONAL_CNN_ARCHITECTURE,
             DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE,
+            DIRECTIONAL_CNN_DUAL_VALUE_ARCHITECTURE,
         ),
         default=TrainConfig.architecture,
     )
@@ -1022,6 +1137,11 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
     parser.add_argument("--optimizer", choices=("adam", "adamw"), default=TrainConfig.optimizer)
     parser.add_argument("--weight-decay", type=float, default=TrainConfig.weight_decay)
     parser.add_argument("--value-weight", type=float, default=TrainConfig.value_weight)
+    parser.add_argument(
+        "--margin-value-weight",
+        type=float,
+        default=TrainConfig.margin_value_weight,
+    )
     parser.add_argument("--symmetry-copies", type=int, default=TrainConfig.symmetry_copies)
     parser.add_argument("--seed", type=int, default=TrainConfig.seed)
     parser.add_argument("--device", choices=("auto", "mps", "cpu"), default=TrainConfig.device)
@@ -1057,6 +1177,7 @@ def parse_args(argv: list[str] | None = None) -> TrainConfig:
         optimizer=args.optimizer,
         weight_decay=args.weight_decay,
         value_weight=args.value_weight,
+        margin_value_weight=args.margin_value_weight,
         symmetry_copies=args.symmetry_copies,
         seed=args.seed,
         device=args.device,

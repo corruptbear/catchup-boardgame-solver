@@ -52,8 +52,10 @@ struct PuctNode {
     std::vector<PuctChild> action_edges;
     int visits = 0;
     double total_value = 0.0;
+    double total_margin_value = 0.0;
 
     double mean_value() const;
+    double mean_margin_value() const;
 };
 
 class PuctMcts {

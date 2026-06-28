@@ -61,16 +61,29 @@ NeuralValueTarget parse_neural_value_target(const std::string& text) {
     if (text == "tanh-margin-scale6") {
         return NeuralValueTarget::TanhMarginScale6;
     }
-    throw std::runtime_error("neural value target must be win-loss or tanh-margin-scale6");
+    if (text == "dual-win-margin" || text == "win-loss+tanh-margin-scale6") {
+        return NeuralValueTarget::DualWinLossTanhMargin;
+    }
+    throw std::runtime_error(
+        "neural value target must be win-loss, tanh-margin-scale6, or dual-win-margin");
 }
 
 const char* neural_value_target_label(NeuralValueTarget target) {
-    return target == NeuralValueTarget::TanhMarginScale6
-        ? "tanh-margin-scale6"
-        : "win-loss";
+    if (target == NeuralValueTarget::TanhMarginScale6) {
+        return "tanh-margin-scale6";
+    }
+    if (target == NeuralValueTarget::DualWinLossTanhMargin) {
+        return "dual-win-margin";
+    }
+    return "win-loss";
 }
 
 NeuralValueTarget infer_neural_value_target_from_model_path(const std::string& model_path) {
+    if (model_path.find("dual") != std::string::npos
+            || model_path.find("win_margin") != std::string::npos
+            || model_path.find("win-loss+tanh-margin") != std::string::npos) {
+        return NeuralValueTarget::DualWinLossTanhMargin;
+    }
     return model_path.find("tanh_margin") != std::string::npos
             || model_path.find("tanh-margin") != std::string::npos
         ? NeuralValueTarget::TanhMarginScale6
@@ -100,7 +113,8 @@ double terminal_value_for(
     const TrackedState& state,
     int player,
     NeuralValueTarget value_target) {
-    if (value_target == NeuralValueTarget::TanhMarginScale6) {
+    if (value_target == NeuralValueTarget::TanhMarginScale6
+            || value_target == NeuralValueTarget::DualWinLossTanhMargin) {
         return terminal_tanh_margin_value_for(state, player);
     }
     return static_cast<double>(state.result_for(player));
@@ -110,7 +124,8 @@ std::vector<NeuralEvaluation> build_neural_evaluations(
     const std::vector<TrackedState>& states,
     const std::vector<ActionList>& legal_actions,
     const float* all_logits,
-    const float* values) {
+    const float* win_values,
+    const float* margin_values) {
     std::vector<NeuralEvaluation> evaluations;
     evaluations.reserve(states.size());
     for (std::size_t state_index = 0; state_index < states.size(); ++state_index) {
@@ -118,6 +133,9 @@ std::vector<NeuralEvaluation> build_neural_evaluations(
             evaluations.push_back({
                 {},
                 static_cast<double>(states[state_index].result_for(states[state_index].current_player)),
+                terminal_tanh_margin_value_for(
+                    states[state_index],
+                    states[state_index].current_player),
                 states[state_index].current_player,
             });
             continue;
@@ -145,7 +163,10 @@ std::vector<NeuralEvaluation> build_neural_evaluations(
 
         evaluations.push_back({
             priors,
-            static_cast<double>(values[state_index]),
+            static_cast<double>(win_values[state_index]),
+            static_cast<double>(margin_values == nullptr
+                ? win_values[state_index]
+                : margin_values[state_index]),
             states[state_index].current_player,
         });
     }
@@ -388,7 +409,11 @@ PuctNode* NeuralPuctMcts::search(const TrackedState& root_state) {
 
     for (int simulation = 0; simulation < simulations_; ++simulation) {
         LeafEvaluation evaluation = select_and_evaluate(root);
-        backpropagate(evaluation.path, evaluation.value, evaluation.player);
+        backpropagate(
+            evaluation.path,
+            evaluation.win_value,
+            evaluation.margin_value,
+            evaluation.player);
     }
     return root;
 }
@@ -399,12 +424,20 @@ NeuralPuctMcts::LeafEvaluation NeuralPuctMcts::select_and_evaluate(PuctNode* roo
 
     while (true) {
         if (node->state.is_terminal()) {
+            double value = terminal_value_for(
+                node->state,
+                node->state.current_player,
+                config_.value_target);
             return {
                 path,
-                terminal_value_for(
-                    node->state,
-                    node->state.current_player,
-                    config_.value_target),
+                config_.value_target == NeuralValueTarget::DualWinLossTanhMargin
+                    ? static_cast<double>(node->state.result_for(node->state.current_player))
+                    : value,
+                config_.value_target == NeuralValueTarget::DualWinLossTanhMargin
+                    ? terminal_tanh_margin_value_for(
+                        node->state,
+                        node->state.current_player)
+                    : value,
                 node->state.current_player,
             };
         }
@@ -414,18 +447,31 @@ NeuralPuctMcts::LeafEvaluation NeuralPuctMcts::select_and_evaluate(PuctNode* roo
             PuctNode* child = materialize_child(node, *edge);
             path.push_back(child);
             if (child->state.is_terminal()) {
+                double value = terminal_value_for(
+                    child->state,
+                    child->state.current_player,
+                    config_.value_target);
                 return {
                     path,
-                    terminal_value_for(
-                        child->state,
-                        child->state.current_player,
-                        config_.value_target),
+                    config_.value_target == NeuralValueTarget::DualWinLossTanhMargin
+                        ? static_cast<double>(child->state.result_for(child->state.current_player))
+                        : value,
+                    config_.value_target == NeuralValueTarget::DualWinLossTanhMargin
+                        ? terminal_tanh_margin_value_for(
+                            child->state,
+                            child->state.current_player)
+                        : value,
                     child->state.current_player,
                 };
             }
             NeuralEvaluation evaluation = evaluator_.evaluate(child->state);
             initialize_edges(child, evaluation.priors);
-            return {path, evaluation.value, evaluation.player};
+            return {
+                path,
+                evaluation.win_value,
+                evaluation.margin_value,
+                evaluation.player,
+            };
         }
 
         node = edge->child;
@@ -442,7 +488,7 @@ PuctChild* NeuralPuctMcts::select_child(PuctNode* node) {
         PuctNode* child = edge.child;
         int child_visits = child == nullptr ? 0 : child->visits;
         double exploitation =
-            child == nullptr ? 0.0 : mean_value_for_player(child, node->state.current_player);
+            child == nullptr ? 0.0 : search_value_for_player(child, node->state.current_player);
         double exploration = 1.4 * edge.prior * parent_sqrt / (1.0 + child_visits);
         double score = exploitation + exploration;
 
@@ -519,12 +565,15 @@ void NeuralPuctMcts::add_root_dirichlet_noise(PuctNode* root) {
 
 void NeuralPuctMcts::backpropagate(
     const std::vector<PuctNode*>& path,
-    double value,
+    double win_value,
+    double margin_value,
     int value_player) {
     for (auto iterator = path.rbegin(); iterator != path.rend(); ++iterator) {
         PuctNode* node = *iterator;
+        const double sign = node->state.current_player == value_player ? 1.0 : -1.0;
         ++node->visits;
-        node->total_value += node->state.current_player == value_player ? value : -value;
+        node->total_value += sign * win_value;
+        node->total_margin_value += sign * margin_value;
     }
 }
 
@@ -534,4 +583,20 @@ double NeuralPuctMcts::mean_value_for_player(const PuctNode* node, int player) {
         return value;
     }
     return -value;
+}
+
+double NeuralPuctMcts::mean_margin_value_for_player(const PuctNode* node, int player) {
+    double value = node->mean_margin_value();
+    if (node->state.current_player == player) {
+        return value;
+    }
+    return -value;
+}
+
+double NeuralPuctMcts::search_value_for_player(const PuctNode* node, int player) const {
+    double value = mean_value_for_player(node, player);
+    if (config_.value_target == NeuralValueTarget::DualWinLossTanhMargin) {
+        value += config_.margin_q_beta * mean_margin_value_for_player(node, player);
+    }
+    return value;
 }

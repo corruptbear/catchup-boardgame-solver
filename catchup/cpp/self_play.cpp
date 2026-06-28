@@ -153,6 +153,8 @@ Config parse_config(int argc, char** argv) {
         config.neural_puct_config.value_target =
             parse_neural_value_target(neural_value_target_arg->second);
     }
+    config.neural_puct_config.margin_q_beta = std::stod(
+        arg_or_default(args, "neural-margin-beta", "0.1"));
     config.neural_puct_config.root_noise_epsilon = std::stod(
         arg_or_default(args, "root-noise-epsilon", "0.25"));
     config.neural_puct_config.root_dirichlet_total_concentration = std::stod(
@@ -515,6 +517,8 @@ std::string teacher_label(const Config& config) {
             + ":device=" + neural_device_label(config.neural_device)
             + ":value_target="
             + neural_value_target_label(config.neural_puct_config.value_target)
+            + ":margin_q_beta="
+            + std::to_string(config.neural_puct_config.margin_q_beta)
             + ":root_noise_epsilon=" + std::to_string(
                 config.neural_puct_config.root_noise_epsilon)
             + ":root_dirichlet_total_concentration=" + std::to_string(

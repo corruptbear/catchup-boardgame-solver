@@ -249,7 +249,8 @@ bool parse_bool_arg(const std::string& text, const std::string& name) {
 
 bool uses_tanh_margin_value(const AgentSpec& agent) {
     return agent.engine == Engine::NeuralPuct
-        && agent.neural_puct_config.value_target == NeuralValueTarget::TanhMarginScale6;
+        && (agent.neural_puct_config.value_target == NeuralValueTarget::TanhMarginScale6
+            || agent.neural_puct_config.value_target == NeuralValueTarget::DualWinLossTanhMargin);
 }
 
 bool default_early_win_enabled(const AgentSpec& agent_a, const AgentSpec& agent_b) {
@@ -684,6 +685,8 @@ void print_text_report(
     if (agent_a.engine == Engine::NeuralPuct || agent_b.engine == Engine::NeuralPuct) {
         std::cout << "Neural value target: A=" << neural_value_target_label_for_agent(agent_a)
                   << " B=" << neural_value_target_label_for_agent(agent_b) << "\n";
+        std::cout << "Neural margin beta: A=" << agent_a.neural_puct_config.margin_q_beta
+                  << " B=" << agent_b.neural_puct_config.margin_q_beta << "\n";
     }
     std::cout << "Result: A wins " << summary.agent_a_wins
               << ", B wins " << summary.agent_b_wins << "\n";
@@ -754,6 +757,10 @@ void print_json_report(
     print_json_string(neural_value_target_label_for_agent(agent_a));
     std::cout << ",\"agent_b_neural_value_target\":";
     print_json_string(neural_value_target_label_for_agent(agent_b));
+    std::cout << ",\"agent_a_neural_margin_beta\":"
+              << agent_a.neural_puct_config.margin_q_beta;
+    std::cout << ",\"agent_b_neural_margin_beta\":"
+              << agent_b.neural_puct_config.margin_q_beta;
     std::cout << ",\"summary\":{";
     std::cout << "\"games\":" << summary.games;
     std::cout << ",\"agent_a_wins\":" << summary.agent_a_wins;
@@ -851,10 +858,20 @@ int main(int argc, char** argv) {
             agent_a.neural_puct_config.value_target =
                 parse_neural_value_target(agent_a_neural_value_target_arg->second);
         }
+        auto agent_a_neural_margin_beta_arg = args.find("agent-a-neural-margin-beta");
+        if (agent_a_neural_margin_beta_arg != args.end()) {
+            agent_a.neural_puct_config.margin_q_beta =
+                std::stod(agent_a_neural_margin_beta_arg->second);
+        }
         auto agent_b_neural_value_target_arg = args.find("agent-b-neural-value-target");
         if (agent_b_neural_value_target_arg != args.end()) {
             agent_b.neural_puct_config.value_target =
                 parse_neural_value_target(agent_b_neural_value_target_arg->second);
+        }
+        auto agent_b_neural_margin_beta_arg = args.find("agent-b-neural-margin-beta");
+        if (agent_b_neural_margin_beta_arg != args.end()) {
+            agent_b.neural_puct_config.margin_q_beta =
+                std::stod(agent_b_neural_margin_beta_arg->second);
         }
         bool early_win_enabled = default_early_win_enabled(agent_a, agent_b);
         auto early_win_arg = args.find("early-win");

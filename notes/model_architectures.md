@@ -314,7 +314,38 @@ quarter, and so on. The outer `tanh` keeps the target in the same `[-1, +1]`
 range as the value head output while preserving more information than plain
 win/loss.
 
-Training command:
+## Directional CNN Dual-Value Variant
+
+```text
+architecture=directional-cnn-dual-value
+```
+
+This variant uses the same directional-CNN trunk and policy head, but has two
+value heads:
+
+```text
+win_value_head     -> final win/loss target, +1 or -1
+margin_value_head  -> tanh(raw_terminal_margin / 6.0)
+```
+
+The margin target uses the same `raw` calculation described above. Neural PUCT
+can back up both values and use:
+
+```text
+Q = win_q + beta * margin_q
+```
+
+The default C++ `beta` is `0.1` and can be changed with
+`--neural-margin-beta` for self-play or one-shot search, and with
+`--agent-a-neural-margin-beta` / `--agent-b-neural-margin-beta` in the arena.
+
+Training uses the normal training command with:
+
+```text
+--architecture directional-cnn-dual-value
+```
+
+Historical single-head directional-CNN training command:
 
 ```sh
 python3.10 -m catchup.training.torch_policy_value --architecture directional-cnn --cnn-layers 4 --data-glob 'data/bootstrap/shard_*_50g_10k.jsonl' --validation-shards 3 --epochs 20 --batch-size 1024 --hidden-size 64 --symmetry-copies 3 --device mps --out data/models/directional_cnn_h64_noplayer_30shards_3sym_20ep.pt --metrics-out data/models/directional_cnn_h64_noplayer_30shards_3sym_20ep_metrics.json

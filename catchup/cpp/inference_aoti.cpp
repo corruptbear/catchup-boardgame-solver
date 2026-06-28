@@ -87,7 +87,9 @@ std::vector<NeuralEvaluation> run_aoti_model_batch(
     auto feature_finished = Clock::now();
 
     at::Tensor policy;
-    at::Tensor value_tensor;
+    at::Tensor win_value_tensor;
+    at::Tensor margin_value_tensor;
+    bool has_margin_value = false;
     Clock::time_point input_started;
     Clock::time_point input_finished;
     Clock::time_point inference_started;
@@ -112,19 +114,28 @@ std::vector<NeuralEvaluation> run_aoti_model_batch(
             at::detail::getMPSHooks().deviceSynchronize();
         }
         inference_finished = Clock::now();
-        if (outputs.size() != 2) {
-            throw std::runtime_error("neural model must return policy logits and value");
+        if (outputs.size() != 2 && outputs.size() != 3) {
+            throw std::runtime_error(
+                "neural model must return policy logits plus one or two value tensors");
         }
+        has_margin_value = outputs.size() == 3;
 
         output_started = Clock::now();
         if (device == NeuralDevice::Mps) {
             policy = outputs[0].to(at::kCPU).contiguous();
-            value_tensor = outputs[1].to(at::kCPU).contiguous();
+            win_value_tensor = outputs[1].to(at::kCPU).contiguous();
+            if (has_margin_value) {
+                margin_value_tensor = outputs[2].to(at::kCPU).contiguous();
+            }
         } else {
             policy = outputs[0].contiguous();
-            value_tensor = outputs[1].contiguous();
+            win_value_tensor = outputs[1].contiguous();
+            if (has_margin_value) {
+                margin_value_tensor = outputs[2].contiguous();
+            }
         }
-        if (policy.size(0) < input_rows || value_tensor.size(0) < input_rows) {
+        if (policy.size(0) < input_rows || win_value_tensor.size(0) < input_rows
+                || (has_margin_value && margin_value_tensor.size(0) < input_rows)) {
             throw std::runtime_error("neural model returned fewer rows than the configured batch size");
         }
         output_finished = Clock::now();
@@ -141,7 +152,8 @@ std::vector<NeuralEvaluation> run_aoti_model_batch(
         states,
         legal_actions,
         policy.data_ptr<float>(),
-        value_tensor.data_ptr<float>());
+        win_value_tensor.data_ptr<float>(),
+        has_margin_value ? margin_value_tensor.data_ptr<float>() : nullptr);
     auto postprocess_finished = Clock::now();
     if (timing != nullptr) {
         timing->feature_ns = elapsed_ns(feature_started, feature_finished);

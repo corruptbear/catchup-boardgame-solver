@@ -185,6 +185,10 @@ double PuctNode::mean_value() const {
     return visits == 0 ? 0.0 : total_value / static_cast<double>(visits);
 }
 
+double PuctNode::mean_margin_value() const {
+    return visits == 0 ? 0.0 : total_margin_value / static_cast<double>(visits);
+}
+
 PuctMcts::PuctMcts(int simulation_count, std::uint64_t seed, PuctConfig config)
     : simulations_(simulation_count), rng_(seed), config_(config) {
     if (simulations_ <= 0) {

@@ -89,6 +89,7 @@ public:
     MlxDirectionalModel(std::string weights_path, int requested_batch_size)
         : weights_(mx::load_safetensors(weights_path).first),
           batch_size_(requested_batch_size),
+          dual_value_(weights_.find("win_value_head.0.weight") != weights_.end()),
           direction_wide_matrix_(array_from_values(
               make_compact_direction_wide_values(),
               {kCellCount, 6 * kCellCount})) {
@@ -191,12 +192,13 @@ public:
 
         auto output_started = Clock::now();
         const float* logits = outputs[0].data<float>();
-        const float* values = outputs[1].data<float>();
+        const float* win_values = outputs[1].data<float>();
+        const float* margin_values = dual_value_ ? outputs[2].data<float>() : nullptr;
         auto output_finished = Clock::now();
 
         auto postprocess_started = Clock::now();
         std::vector<NeuralEvaluation> evaluations =
-            build_neural_evaluations(states, legal_actions, logits, values);
+            build_neural_evaluations(states, legal_actions, logits, win_values, margin_values);
         auto postprocess_finished = Clock::now();
 
         if (timing != nullptr) {
@@ -225,6 +227,17 @@ private:
         mx::array finish_logit = linear_layer(finish_hidden, "finish_policy_scorer.2");
         mx::array policy_logits = mx::concatenate({claim_logits, finish_logit}, 1);
 
+        if (dual_value_) {
+            mx::array win_hidden = relu(linear_layer(combined, "win_value_head.0"));
+            mx::array win_value = mx::squeeze(
+                mx::tanh(linear_layer(win_hidden, "win_value_head.2")),
+                1);
+            mx::array margin_hidden = relu(linear_layer(combined, "margin_value_head.0"));
+            mx::array margin_value = mx::squeeze(
+                mx::tanh(linear_layer(margin_hidden, "margin_value_head.2")),
+                1);
+            return {policy_logits, win_value, margin_value};
+        }
         mx::array value_hidden = relu(linear_layer(combined, "value_head.0"));
         mx::array value = mx::squeeze(mx::tanh(linear_layer(value_hidden, "value_head.2")), 1);
         return {policy_logits, value};
@@ -266,6 +279,7 @@ private:
 
     std::unordered_map<std::string, mx::array> weights_;
     int batch_size_;
+    bool dual_value_;
     mx::array direction_wide_matrix_;
     std::function<std::vector<mx::array>(const std::vector<mx::array>&)> compiled_forward_;
 };

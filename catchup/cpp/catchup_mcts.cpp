@@ -254,6 +254,8 @@ int main(int argc, char** argv) {
             if (neural_value_target_arg != args.end()) {
                 config.value_target = parse_neural_value_target(neural_value_target_arg->second);
             }
+            config.margin_q_beta =
+                std::stod(arg_or_default(args, "neural-margin-beta", "0.1"));
             std::unique_ptr<NeuralEvaluatorBase> evaluator;
             if (backend == NeuralBackend::Mlx) {
                 evaluator = std::make_unique<NeuralEvaluator>(

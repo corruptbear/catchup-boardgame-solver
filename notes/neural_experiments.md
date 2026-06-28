@@ -599,3 +599,93 @@ model matchup                           search           seed  games  action sel
 Exp6 h128 iter_0080 vs Exp5 h64 iter_0080 neural-puct:200      1    256  sample/sample    123-133      48.0%   59-69   64-64   158.62s
 Exp6 h128 iter_0080 vs Exp3 h64 iter_0012 neural-puct:200      1    256  sample/sample    142-114      55.5%   67-61   75-53   169.81s
 ```
+
+## Experiment 7: H128 Dual-Value Redo
+
+This branch redoes the Experiment 6 h128 run with two value heads. The model
+predicts both win/loss and tanh-margin. Neural PUCT backs up both values and
+uses `Q = win_q + 0.1 * margin_q` during selection.
+
+Setup:
+
+```text
+architecture                     directional-cnn-dual-value
+hidden size                      128
+parameters                       561156
+value target                     win-loss + tanh-margin-scale6
+optimizer                        AdamW
+weight_decay                     1e-4
+self-play search                 neural-puct:200
+self-play games per generation   640
+evaluator backend                MLX
+self-play neural batch size      640
+early win during self-play        false
+seed replay window               Experiment 5 iter_0041 through iter_0050
+```
+
+Replay buffer settings:
+
+```text
+replay window generations        10
+replay gamma                     0.85
+target lifetime coverage         2.0
+training minibatch size          512
+symmetry copies                  3
+replay data glob                 data/neural_self_play_h128_dual_value/iter_*.jsonl
+```
+
+`iter_0050` is the seed checkpoint trained from random h128 dual-value weights
+on the Experiment 5 `iter_0041` through `iter_0050` replay window. `iter_0060`
+is the first checkpoint whose replay window is entirely Exp7-generated data.
+
+Self-play and replay training summary. The loss columns are training losses,
+not validation losses:
+
+```text
+generation  sims  samples  Blue  White  avg filled  avg turns  train batches  train samples  train sec  train total loss  train policy loss  train value loss  train win value loss  train margin value loss
+iter_0050   seed        -     -      -           -         -            158          80896     30.769  3.5318  2.3297  1.2020  0.9368  0.2652
+iter_0051    200    40215   329    311      61.000    26.719            158          80896     29.427  3.3133  2.1428  1.1705  0.9064  0.2641
+iter_0052    200    41102   311    329      61.000    27.197            161          82432     30.677  3.2380  2.0976  1.1404  0.8807  0.2598
+iter_0053    200    41190   330    310      61.000    28.080            161          82432     31.125  3.1753  2.0677  1.1076  0.8470  0.2606
+iter_0054    200    40981   303    337      61.000    28.514            161          82432     30.052  3.1716  2.0763  1.0953  0.8323  0.2630
+iter_0055    200    41363   318    322      61.000    28.967            162          82944     30.162  3.1626  2.0651  1.0975  0.8208  0.2767
+iter_0056    200    40796   314    326      61.000    28.233            160          81920     29.619  3.1589  2.0785  1.0804  0.8132  0.2672
+iter_0057    200    40875   316    324      61.000    27.619            160          81920     30.013  3.0856  2.0482  1.0373  0.7813  0.2561
+iter_0058    200    41573   319    321      61.000    29.334            163          83456     31.605  3.0838  2.0509  1.0329  0.7731  0.2599
+iter_0059    200    41063   323    317      61.000    28.000            161          82432     33.439  3.0521  2.0547  0.9974  0.7491  0.2483
+iter_0060    200    41003   345    295      61.000    28.530            161          82432     29.653  3.0575  2.0566  1.0009  0.7529  0.2480
+iter_0061    200    41353   320    320      61.000    28.934            162          82944     30.336  3.0473  2.0475  0.9999  0.7545  0.2454
+iter_0062    200    41289   308    332      61.000    28.892            162          82944     30.207  3.0395  2.0424  0.9971  0.7512  0.2459
+iter_0063    200    40862   315    325      61.000    28.934            160          81920     30.295  3.0295  2.0402  0.9893  0.7470  0.2423
+iter_0064    200    40812   298    342      61.000    28.752            160          81920     29.155  3.0179  2.0324  0.9855  0.7499  0.2356
+iter_0065    200    40814   324    316      61.000    27.783            160          81920     29.460  3.0107  2.0208  0.9899  0.7621  0.2278
+iter_0066    200    40979   331    309      61.000    28.831            161          82432     31.189  2.9846  2.0099  0.9747  0.7505  0.2242
+iter_0067    200    40861   317    323      61.000    28.442            160          81920     29.061  2.9601  2.0059  0.9542  0.7389  0.2154
+iter_0068    200    40540   321    319      61.000    28.244            159          81408     29.617  2.9688  2.0122  0.9566  0.7437  0.2130
+iter_0069    200    40532   316    324      61.000    28.370            159          81408     30.299  2.9687  2.0014  0.9673  0.7538  0.2134
+iter_0070    200    40893   318    322      61.000    28.803            160          81920     32.141  2.9471  1.9847  0.9624  0.7503  0.2121
+```
+
+Saved shard path pattern:
+
+```text
+data/neural_self_play_h128_dual_value/iter_*_directional_h128_dual_value_npuct200_640g_b640_beta0p1.jsonl
+```
+
+Saved replay checkpoint pattern:
+
+```text
+data/models/directional_cnn_h128_dual_value_adamw_wd1e4_iter_*_npuct200_replay.pt
+data/models/directional_cnn_h128_dual_value_adamw_wd1e4_iter_*_npuct200_replay_mlx.safetensors
+```
+
+Arena checks:
+
+```text
+model matchup                     search           seed  games  action selection  result  score rate  Blue result  White result  real
+iter_0060 vs heuristic puct:1000  neural-puct:200      1    128  max/max           90-38       70.3%     48-16        42-22      74.91s
+iter_0060 vs heuristic puct:10000 neural-puct:200      1    128  max/max           41-87       32.0%     15-49        26-38     164.45s
+iter_0070 vs heuristic puct:1000  neural-puct:200      1    128  max/max          108-20       84.4%     52-12        56-8       76.95s
+iter_0070 vs heuristic puct:10000 neural-puct:200      1    128  max/max           73-55       57.0%     32-32        41-23     166.63s
+iter_0070 vs heuristic puct:10000 neural-puct:200 100001    128  max/max           72-56       56.2%     36-28        36-28     157.76s
+```

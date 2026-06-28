@@ -38,6 +38,23 @@ class TorchPolicyValueTest(unittest.TestCase):
         self.assertEqual(tuple(policy_logits.shape), (3, trainer.ACTION_COUNT))
         self.assertEqual(tuple(value.shape), (3,))
 
+    def test_dual_value_directional_cnn_forward_returns_two_value_shapes(self) -> None:
+        trainer = import_trainer()
+        torch = importlib.import_module("torch")
+
+        model = trainer.HexDirectionalCnnPolicyValueNet(
+            hidden_size=16,
+            cnn_layers=2,
+            dual_value=True,
+        )
+        features = torch.zeros((3, trainer.FEATURE_COUNT), dtype=torch.float32)
+
+        policy_logits, win_value, margin_value = model(features)
+
+        self.assertEqual(tuple(policy_logits.shape), (3, trainer.ACTION_COUNT))
+        self.assertEqual(tuple(win_value.shape), (3,))
+        self.assertEqual(tuple(margin_value.shape), (3,))
+
     def test_directional_cnn_claim_gather_matches_grid_to_cell_matrix(self) -> None:
         trainer = import_trainer()
         torch = importlib.import_module("torch")
@@ -73,6 +90,31 @@ class TorchPolicyValueTest(unittest.TestCase):
             torch.zeros_like(model.value_head[-1].bias),
         ))
         self.assertLess(float(value.abs().max()), 0.1)
+
+    def test_dual_value_directional_cnn_initializes_output_biases_to_zero(self) -> None:
+        trainer = import_trainer()
+        torch = importlib.import_module("torch")
+
+        torch.manual_seed(1)
+        model = trainer.HexDirectionalCnnPolicyValueNet(
+            hidden_size=16,
+            cnn_layers=1,
+            dual_value=True,
+        )
+        features = torch.zeros((4, trainer.FEATURE_COUNT), dtype=torch.float32)
+        with torch.no_grad():
+            _, win_value, margin_value = model(features)
+
+        self.assertTrue(torch.equal(
+            model.win_value_head[-1].bias,
+            torch.zeros_like(model.win_value_head[-1].bias),
+        ))
+        self.assertTrue(torch.equal(
+            model.margin_value_head[-1].bias,
+            torch.zeros_like(model.margin_value_head[-1].bias),
+        ))
+        self.assertLess(float(win_value.abs().max()), 0.1)
+        self.assertLess(float(margin_value.abs().max()), 0.1)
 
     def test_sample_features_do_not_include_absolute_current_player_scalar(self) -> None:
         trainer = import_trainer()
@@ -130,6 +172,18 @@ class TorchPolicyValueTest(unittest.TestCase):
 
         self.assertIsInstance(directional, trainer.HexDirectionalCnnPolicyValueNet)
 
+    def test_build_model_from_metadata_accepts_dual_value_directional_cnn(self) -> None:
+        trainer = import_trainer()
+
+        directional = trainer.build_model_from_metadata({
+            "architecture": trainer.DIRECTIONAL_CNN_DUAL_VALUE_ARCHITECTURE,
+            "hidden_size": 16,
+            "cnn_layers": 2,
+        })
+
+        self.assertIsInstance(directional, trainer.HexDirectionalCnnPolicyValueNet)
+        self.assertTrue(directional.dual_value)
+
     def test_tanh_margin_value_target_uses_current_player_perspective(self) -> None:
         trainer = import_trainer()
 
@@ -165,6 +219,40 @@ class TorchPolicyValueTest(unittest.TestCase):
             math.tanh(-3.0 / 6.0),
             places=7,
         )
+
+    def test_dual_value_targets_include_win_loss_and_tanh_margin(self) -> None:
+        trainer = import_trainer()
+
+        sample = {
+            "state": {
+                "owners": [-1] * trainer.CELL_COUNT,
+                "current_player": 1,
+                "selected_this_turn": [],
+                "claimed_this_turn": 0,
+                "max_claims": 1,
+                "turn_start_largest": 0,
+                "opening_turn": True,
+                "legal_mask": [False] * trainer.ACTION_COUNT,
+            },
+            "policy_target": [0.0] * trainer.ACTION_COUNT,
+            "value_target": -1.0,
+            "terminal": {
+                "winner": 0,
+                "blue_group_sizes": [8],
+                "white_group_sizes": [5, 3],
+                "filled_cells": 61,
+                "completed_turns": 30,
+            },
+        }
+
+        _, _, values = trainer.sample_to_arrays(
+            sample,
+            value_target_kind=trainer.DUAL_VALUE_TARGET,
+        )
+
+        self.assertEqual(tuple(values.shape), (2,))
+        self.assertAlmostEqual(float(values[0]), -1.0)
+        self.assertAlmostEqual(float(values[1]), math.tanh(-3.0 / 6.0), places=7)
 
     def test_tanh_margin_value_target_discounts_later_deciding_group(self) -> None:
         trainer = import_trainer()
@@ -266,6 +354,8 @@ class TorchPolicyValueTest(unittest.TestCase):
             "26",
             "--architecture",
             "directional-cnn-tanh-margin",
+            "--margin-value-weight",
+            "0.25",
         ])
 
         self.assertEqual(config.replay_data_glob, "data/neural_self_play/iter_*.jsonl")
@@ -278,6 +368,7 @@ class TorchPolicyValueTest(unittest.TestCase):
             config.architecture,
             trainer.DIRECTIONAL_CNN_TANH_MARGIN_ARCHITECTURE,
         )
+        self.assertEqual(config.margin_value_weight, 0.25)
 
 
 if __name__ == "__main__":
