@@ -664,6 +664,68 @@ iter_0067    200    40861   317    323      61.000    28.442            160     
 iter_0068    200    40540   321    319      61.000    28.244            159          81408     29.617  2.9688  2.0122  0.9566  0.7437  0.2130
 iter_0069    200    40532   316    324      61.000    28.370            159          81408     30.299  2.9687  2.0014  0.9673  0.7538  0.2134
 iter_0070    200    40893   318    322      61.000    28.803            160          81920     32.141  2.9471  1.9847  0.9624  0.7503  0.2121
+iter_0071    200    40789   322    318      61.000    28.552            160          81920     29.773  2.9379  1.9747  0.9632  0.7538  0.2095
+iter_0072    200    40658   324    316      61.000    28.286            159          81408     29.811  2.9096  1.9555  0.9541  0.7507  0.2033
+iter_0073    200    40462   338    302      61.000    28.456            159          81408     29.755  2.8868  1.9390  0.9478  0.7499  0.1979
+iter_0074    200    40472   309    331      61.000    27.906            159          81408     29.610  2.8556  1.9238  0.9319  0.7416  0.1903
+iter_0075    200    40384   329    311      61.000    28.464            158          80896     29.581  2.8870  1.9314  0.9556  0.7606  0.1950
+iter_0076    200    40637   315    325      61.000    28.344            159          81408     30.447  2.8759  1.9282  0.9477  0.7590  0.1887
+iter_0077    200    40568   317    323      61.000    28.856            159          81408     29.801  2.8711  1.9238  0.9473  0.7588  0.1884
+iter_0078    200    40479   326    314      61.000    28.595            159          81408     29.861  2.8724  1.9216  0.9508  0.7626  0.1882
+iter_0079    200    40601   330    310      61.000    28.863            159          81408     29.992  2.8305  1.9026  0.9279  0.7420  0.1859
+iter_0080    200    40641   334    306      61.000    28.983            159          81408     29.661  2.8390  1.8948  0.9442  0.7554  0.1888
+iter_0081    200    40530   302    338      61.000    28.673            159          81408     29.667  2.8053  1.8766  0.9287  0.7428  0.1860
+iter_0082    200    40466   326    314      61.000    29.081            159          81408     29.734  2.7910  1.8679  0.9231  0.7352  0.1879
+iter_0083    200    40501   334    306      61.000    28.825            159          81408     30.456  2.7876  1.8654  0.9222  0.7346  0.1876
+iter_0084    200    40380   327    313      61.000    28.747            158          80896     29.522  2.7767  1.8607  0.9160  0.7308  0.1853
+iter_0085    200    40450   313    327      61.000    28.939            159          81408     29.583  2.7658  1.8579  0.9079  0.7248  0.1831
+iter_0086    200    40352   323    317      61.000    28.414            158          80896     31.668  2.7506  1.8463  0.9044  0.7247  0.1796
+iter_0087    200    40439   319    321      61.000    28.784            158          80896     29.504  2.7477  1.8351  0.9126  0.7312  0.1814
+iter_0088    200    40369   334    306      61.000    28.483            158          80896     31.348  2.7232  1.8176  0.9056  0.7279  0.1777
+iter_0089    200    40545   310    330      61.000    29.127            159          81408     29.649  2.7074  1.7989  0.9085  0.7305  0.1780
+iter_0090    200    40368   325    315      61.000    28.636            158          80896     30.657  2.7093  1.8007  0.9086  0.7322  0.1764
+iter_0091    200    40563   323    317      61.000    28.952            159          81408     30.949  2.7113  1.7893  0.9220  0.7441  0.1779
+iter_0092    200    40576   319    321      61.000    29.109            159          81408     31.027  2.6919  1.7818  0.9101  0.7360  0.1740
+iter_0093    200    40424   328    312      61.000    28.695            158          80896     30.087  2.6581  1.7662  0.8919  0.7256  0.1663
+iter_0094    200    40468   344    296      61.000    28.673            159          81408     32.317  2.6351  1.7518  0.8832  0.7197  0.1635
+iter_0095    200    40445   318    322      61.000    28.828            158          80896     29.404  2.6119  1.7337  0.8782  0.7181  0.1601
+iter_0096    200    40570   293    347      61.000    29.166            159          81408     29.249  2.5972  1.7121  0.8851  0.7209  0.1643
+iter_0097    200    40474   318    322      61.000    29.125            159          81408     30.329  2.5618  1.6933  0.8686  0.7070  0.1616
+iter_0098    200    40323   310    330      61.000    28.839            158          80896     30.293  2.5546  1.6941  0.8605  0.7020  0.1585
+iter_0099    200    40498   316    324      61.000    29.169            159          81408     30.368  2.5294  1.6597  0.8698  0.7061  0.1637
+iter_0100    200    40436   329    311      61.000    29.002            158          80896     29.267  2.5188  1.6545  0.8642  0.7017  0.1625
+iter_0101    200    40406   331    309      61.000    28.916            158          80896     29.906  2.5208  1.6470  0.8738  0.7110  0.1628
+iter_0102    200    40309   298    342      61.000    28.877            158          80896     29.354  2.4867  1.6327  0.8540  0.6951  0.1589
+iter_0103    200    40500   327    313      61.000    28.952            159          81408     32.535  2.4583  1.6119  0.8464  0.6895  0.1569
+iter_0104    200    40361   315    325      61.000    28.709            158          80896     29.795  2.4650  1.6110  0.8540  0.6937  0.1603
+iter_0105    200    40487   303    337      61.000    29.041            159          81408     29.652  2.4426  1.5995  0.8431  0.6852  0.1579
+iter_0106    200    40297   318    322      61.000    28.692            158          80896     30.742  2.4387  1.5889  0.8498  0.6909  0.1589
+iter_0107    200    40256   329    311      61.000    28.777            158          80896     29.101  2.4138  1.5753  0.8385  0.6846  0.1539
+iter_0108    200    40264   344    296      61.000    28.712            158          80896     30.102  2.4027  1.5640  0.8387  0.6862  0.1525
+iter_0109    200    40407   320    320      61.000    28.886            158          80896     30.182  2.4090  1.5649  0.8441  0.6890  0.1552
+iter_0110    200    40315   314    326      61.000    28.953            158          80896     30.103  2.3881  1.5582  0.8299  0.6796  0.1503
+iter_0111    200    40381   321    319      61.000    29.145            158          80896     31.674  2.3899  1.5531  0.8368  0.6842  0.1526
+iter_0112    200    40372   329    311      61.000    28.741            158          80896     28.820  2.3820  1.5432  0.8388  0.6836  0.1552
+iter_0113    200    40509   313    327      61.000    28.944            159          81408     29.840  2.3672  1.5403  0.8269  0.6746  0.1523
+iter_0114    200    40400   320    320      61.000    29.000            158          80896     28.355  2.3410  1.5321  0.8090  0.6604  0.1486
+iter_0115    200    40272   297    343      61.000    28.766            158          80896     31.570  2.3265  1.5156  0.8110  0.6618  0.1491
+iter_0116    200    40277   302    338      61.000    28.773            158          80896     29.268  2.3301  1.5221  0.8080  0.6585  0.1495
+iter_0117    200    40277   285    355      61.000    28.855            158          80896     28.990  2.3117  1.5106  0.8010  0.6511  0.1499
+iter_0118    200    40315   286    354      61.000    28.847            158          80896     29.214  2.3127  1.5085  0.8043  0.6529  0.1514
+iter_0119    200    40292   290    350      61.000    28.777            158          80896     28.604  2.3089  1.5108  0.7981  0.6486  0.1495
+iter_0120    200    40300   268    372      61.000    28.817            158          80896     28.965  2.2804  1.4893  0.7911  0.6411  0.1500
+```
+
+The faster policy-loss drop near `iter_0100` is mostly explained by sharper
+teacher visit distributions, not by a replay-window bug. Manifest checks for
+`iter_0081` through `iter_0100` had 10 unique existing shards per window. The
+replay-weighted policy-target entropy fell from `1.5917` at `iter_0080` to
+`1.3617` at `iter_0100`, while the KL distance stayed roughly flat:
+
+```text
+iter_0080  target entropy 1.5917  policy loss 1.8948  KL distance 0.3032
+iter_0090  target entropy 1.4981  policy loss 1.8007  KL distance 0.3026
+iter_0100  target entropy 1.3617  policy loss 1.6545  KL distance 0.2928
 ```
 
 Saved shard path pattern:
@@ -688,4 +750,206 @@ iter_0060 vs heuristic puct:10000 neural-puct:200      1    128  max/max        
 iter_0070 vs heuristic puct:1000  neural-puct:200      1    128  max/max          108-20       84.4%     52-12        56-8       76.95s
 iter_0070 vs heuristic puct:10000 neural-puct:200      1    128  max/max           73-55       57.0%     32-32        41-23     166.63s
 iter_0070 vs heuristic puct:10000 neural-puct:200 100001    128  max/max           72-56       56.2%     36-28        36-28     157.76s
+iter_0079 vs heuristic puct:10000 neural-puct:200      1    128  max/max           92-36       71.9%     46-18        46-18          -
+iter_0079 vs heuristic puct:10000 neural-puct:200 100001    128  max/max           85-43       66.4%     43-21        42-22          -
+iter_0079 vs heuristic puct:10000 neural-puct:200 200001    128  max/max           80-48       62.5%     38-26        42-22          -
+iter_0090 vs heuristic puct:1000  neural-puct:200      1    128  max/max          120-8        93.8%     59-5         61-3       79.20s
+iter_0090 vs heuristic puct:10000 neural-puct:200      1    128  max/max          100-28       78.1%     49-15        51-13     172.08s
+iter_0090 vs heuristic puct:10000 neural-puct:200 100001    128  max/max           90-38       70.3%     46-18        44-20     182.56s
+iter_0090 vs heuristic puct:10000 neural-puct:200 200001    128  max/max           96-32       75.0%     46-18        50-14     184.16s
+iter_0100 vs heuristic puct:1000  neural-puct:200      1    128  max/max          122-6        95.3%     62-2         60-4       78.00s
+iter_0100 vs heuristic puct:10000 neural-puct:200      1    128  max/max           96-32       75.0%     44-20        52-12     159.77s
+iter_0100 vs heuristic puct:10000 neural-puct:200 100001    128  max/max          109-19       85.2%     55-9         54-10     160.74s
+iter_0100 vs heuristic puct:10000 neural-puct:200 200001    128  max/max          100-28       78.1%     50-14        50-14     168.24s
+iter_0110 vs heuristic puct:1000  neural-puct:200      1    128  max/max          121-7        94.5%     59-5         62-2       77.52s
+iter_0110 vs heuristic puct:10000 neural-puct:200      1    128  max/max          112-16       87.5%     56-8         56-8      154.56s
+iter_0110 vs heuristic puct:10000 neural-puct:200 100001    128  max/max          121-7        94.5%     60-4         61-3      157.99s
+iter_0110 vs heuristic puct:10000 neural-puct:200 200001    128  max/max          113-15       88.3%     54-10        59-5      153.52s
+iter_0120 vs heuristic puct:10000 neural-puct:200      1    128  max/max          111-17       86.7%     55-9         56-8      150.09s
+iter_0120 vs heuristic puct:10000 neural-puct:200 100001    128  max/max          112-16       87.5%     57-7         55-9      145.61s
+iter_0120 vs heuristic puct:10000 neural-puct:200 200001    128  max/max          118-10       92.2%     60-4         58-6      149.27s
+```
+
+## Experiment 8: H128 Dual-Value Restart With Root Policy Temperature
+
+Motivation: Exp7 gained arena strength, but its policy targets also sharpened
+rapidly and the opening policy showed self-reinforcing feedback. In particular,
+some opening moves could be selected often because of prior/visit feedback even
+when their value was questionable. Exp7 also developed a suspicious Blue/White
+balance drift in later self-play generations. Exp8 tests whether root policy
+temperature can reduce that feedback while preserving the useful value-learning
+trend.
+
+Exp8 restarts from the Exp7 `iter_0101` checkpoint. The only search-policy
+change is root policy temperature before root Dirichlet noise.
+
+```text
+self-play search                  neural-puct:200
+self-play games per generation    640
+evaluator backend                 MLX
+self-play neural batch size       640
+early win during self-play         false
+neural margin beta                 0.1
+optimizer                          AdamW
+weight_decay                       1e-4
+replay window generations          10
+replay gamma                       0.85
+target lifetime coverage           2.0
+training minibatch size            512
+symmetry copies                    3
+```
+
+Root policy temperature settings:
+
+```text
+start                              1.25
+end                                1.10
+halflife in completed turns        9.0
+schedule                           tau(t) = 1.10 + 0.15 * 2^(-t / 9)
+visit temperature                  max(0.05, empty_count / 61)
+root noise                         existing decayed schedule
+```
+
+`halflife = 9` came from the board-diameter heuristic. On this board, full-board
+self-play averages about 29 completed turns, so the schedule still applies
+noticeable flattening late in the game. The permanent floor `end = 1.10` may be
+more important than the halflife.
+
+Self-play and replay training summary. The loss columns are training losses,
+not validation losses:
+
+```text
+generation  sims  samples  Blue  White  avg filled  avg turns  train batches  train samples  train sec  train total loss  train policy loss  train value loss  train win value loss  train margin value loss
+iter_0102    200    40272   298    342      61.000    28.803            158          80896     29.494  2.5049  1.6519  0.8530  0.6932  0.1598
+iter_0103    200    40513   307    333      61.000    28.694            159          81408     33.287  2.5274  1.6618  0.8656  0.7020  0.1636
+iter_0104    200    40338   328    312      61.000    28.808            158          80896     29.595  2.5069  1.6637  0.8432  0.6819  0.1613
+iter_0105    200    40269   312    328      61.000    28.870            158          80896     31.329  2.5014  1.6629  0.8385  0.6783  0.1602
+iter_0106    200    40433   349    291      61.000    28.805            158          80896     29.463  2.5097  1.6683  0.8414  0.6805  0.1609
+iter_0107    200    40411   360    280      61.000    28.939            158          80896     29.235  2.4985  1.6621  0.8365  0.6793  0.1572
+iter_0108    200    40346   332    308      61.000    28.736            158          80896     29.276  2.4872  1.6585  0.8286  0.6746  0.1541
+iter_0109    200    40379   312    328      61.000    29.009            158          80896     29.503  2.4724  1.6527  0.8196  0.6663  0.1533
+iter_0110    200    40360   298    342      61.000    28.791            158          80896     29.453  2.4646  1.6542  0.8103  0.6582  0.1521
+iter_0111    200    40458   358    282      61.000    28.770            159          81408     32.374  2.4386  1.6503  0.7883  0.6371  0.1512
+iter_0112    200    40364   292    348      61.000    28.692            158          80896     30.841  2.4491  1.6565  0.7926  0.6403  0.1523
+iter_0113    200    40467   319    321      61.000    28.778            159          81408     30.678  2.4511  1.6521  0.7991  0.6446  0.1545
+iter_0114    200    40537   316    324      61.000    28.945            159          81408     30.363  2.4329  1.6467  0.7862  0.6317  0.1546
+iter_0115    200    40292   294    346      61.000    28.720            158          80896     30.014  2.4264  1.6444  0.7820  0.6283  0.1537
+iter_0116    200    40662   331    309      61.000    28.809            159          81408     31.300  2.4233  1.6492  0.7740  0.6205  0.1535
+iter_0117    200    40399   273    367      61.000    28.781            158          80896     30.782  2.4098  1.6426  0.7672  0.6155  0.1516
+iter_0118    200    40378   297    343      61.000    28.664            158          80896     29.457  2.4054  1.6386  0.7668  0.6138  0.1531
+iter_0119    200    40463   281    359      61.000    28.861            159          81408     29.905  2.3960  1.6327  0.7632  0.6092  0.1540
+iter_0120    200    40479   298    342      61.000    28.925            159          81408     30.271  2.3968  1.6338  0.7630  0.6070  0.1560
+```
+
+Exp8 overall through `iter_0120` is mildly White-skewed. The late window is
+more concerning than the full-run average:
+
+```text
+iter_0102 through iter_0114  Blue 4181  White 4139  Blue rate 50.3%
+iter_0102 through iter_0119  Blue 5657  White 5863  Blue rate 49.1%
+iter_0102 through iter_0120  Blue 5955  White 6205  Blue rate 49.0%
+iter_0115 through iter_0120  Blue 1774  White 2066  Blue rate 46.2%
+iter_0107                   Blue 360   White 280   Blue rate 56.2%
+iter_0111                   Blue 358   White 282   Blue rate 55.9%
+iter_0112                   Blue 292   White 348   Blue rate 45.6%
+iter_0117                   Blue 273   White 367   Blue rate 42.7%
+iter_0119                   Blue 281   White 359   Blue rate 43.9%
+iter_0120                   Blue 298   White 342   Blue rate 46.6%
+```
+
+Opening-root checks. `chosen` is the sampled self-play first move. `argmax` is
+the largest entry in the MCTS visit target. `avg` is the average target
+probability for that cell across the 640 opening positions.
+
+```text
+generation  #30 chosen  #30 argmax  #30 avg  #21 chosen  #21 argmax  #21 avg  note
+iter_0102      29/640      57/640   0.0405      -           -        0.0452  flat opening cluster
+iter_0103      91/640      75/640   0.1161    63/640     372/640    0.1203  #21/#30/#29 cluster
+iter_0104      34/640      31/640   0.0711    59/640     440/640    0.0825  #30 reduced, #21 argmax high
+iter_0105      41/640     254/640   0.0816    37/640     114/640    0.0670  #30 argmax returns
+iter_0106      52/640       7/640   0.0698    62/640     527/640    0.1004  #21 argmax dominates
+iter_0107      57/640       0/640   0.0789    68/640     593/640    0.1053  #21 argmax dominates
+iter_0108     110/640     366/640   0.1699    82/640     111/640    0.1169  #30 concentration returns
+iter_0109      57/640      78/640   0.0881    50/640     481/640    0.0895  #21 argmax dominates
+iter_0110     114/640     555/640   0.1860    51/640      18/640    0.0784  #30 argmax dominates
+iter_0111      55/640     352/640   0.1041    61/640     228/640    0.1008  #split #30/#21
+iter_0112      53/640     540/640   0.0997    50/640      43/640    0.0863  #30 argmax dominates
+iter_0113      67/640     536/640   0.0990    41/640      21/640    0.0638  #30 argmax dominates
+iter_0114      59/640     540/640   0.0910    57/640      87/640    0.0858  #30 argmax dominates
+iter_0115     161/640     632/640   0.2470    31/640       1/640    0.0544  #30 concentration jumps
+iter_0116      75/640     640/640   0.1343    56/640       0/640    0.0908  #30 argmax saturates
+iter_0117     228/640     639/640   0.3434    32/640       0/640    0.0480  #30 chosen often
+iter_0118     239/640     639/640   0.4113    29/640       1/640    0.0505  #30 target keeps sharpening
+iter_0119     289/640     640/640   0.4799    22/640       0/640    0.0359  #30 dominates hard
+iter_0120     188/640     640/640   0.2983    44/640       0/640    0.0611  #30 argmax still saturated
+```
+
+Policy-loss interpretation:
+
+```text
+policy loss = target entropy + KL(target || model)
+KL(target || model) = policy loss - target entropy
+```
+
+Exp7 policy loss dropped mostly because the teacher targets sharpened. Exp8
+kept the target entropy roughly flat, so the raw policy loss stopped receiving
+that entropy-driven drop.
+
+```text
+Direct same-generation comparison:
+
+generation  Exp7 entropy  Exp7 policy  Exp7 KL  Exp7 value  Exp8 entropy  Exp8 policy  Exp8 KL  Exp8 value
+iter_0102      1.3427        1.6327    0.2901     0.8540     1.3573        1.6519    0.2947     0.8530
+iter_0103      1.3236        1.6119    0.2883     0.8464     1.3661        1.6618    0.2957     0.8656
+iter_0104      1.3228        1.6110    0.2881     0.8540     1.3717        1.6637    0.2920     0.8432
+iter_0105      1.3143        1.5995    0.2852     0.8431     1.3746        1.6629    0.2882     0.8385
+iter_0106      1.3025        1.5889    0.2864     0.8498     1.3745        1.6683    0.2938     0.8414
+iter_0107      1.2901        1.5753    0.2853     0.8385     1.3709        1.6621    0.2912     0.8365
+iter_0108      1.2760        1.5640    0.2880     0.8387     1.3661        1.6585    0.2925     0.8286
+iter_0109      1.2784        1.5649    0.2865     0.8441     1.3587        1.6527    0.2940     0.8196
+iter_0110      1.2704        1.5582    0.2878     0.8299     1.3580        1.6542    0.2962     0.8103
+iter_0111      1.2629        1.5531    0.2902     0.8368     1.3627        1.6503    0.2876     0.7883
+iter_0112      1.2562        1.5432    0.2870     0.8388     1.3638        1.6565    0.2928     0.7926
+iter_0113      1.2589        1.5403    0.2814     0.8269     1.3588        1.6521    0.2932     0.7991
+iter_0114      1.2447        1.5321    0.2874     0.8090     1.3626        1.6467    0.2841     0.7862
+```
+
+Current read:
+
+```text
+Exp7:
+  arena strength improved, but much of the policy-loss drop came from target
+  sharpening. This is the same mechanism that can create opening feedback.
+
+Exp8:
+  policy temperature delayed the #30-specific collapse, but did not prevent
+  opening feedback. The hard argmax shifted between #21 and #30, then #30
+  dominated again by iter_0110 through iter_0114. From iter_0115 through
+  iter_0120, #30 becomes much more concentrated: its opening target average
+  rises as high as 0.4799 at iter_0119, and it is the target argmax in
+  essentially every opening position from iter_0116 onward. The same late
+  window is White-skewed in self-play: Blue 1774, White 2066, Blue rate 46.2%.
+  Raw policy loss moves down slowly, but mostly without KL-distance improvement.
+  Value loss does improve.
+```
+
+Arena checks:
+
+```text
+model matchup                     search           seed  games  action selection  result  score rate  Blue result  White result  real
+iter_0120 vs heuristic puct:10000 neural-puct:200      1    128  max/max          116-12       90.6%     55-9         61-3           -
+iter_0120 vs heuristic puct:10000 neural-puct:200 100001    128  max/max          116-12       90.6%     57-7         59-5      160.95s
+iter_0120 vs heuristic puct:10000 neural-puct:200 200001    128  max/max          111-17       86.7%     51-13        60-4      170.07s
+```
+
+The external arena result is strong despite the late self-play White skew. This
+means the skew is still a training-loop warning signal, but it does not by
+itself show that the current model is weak against the heuristic PUCT baseline.
+
+Saved shard and checkpoint path patterns:
+
+```text
+data/neural_self_play_exp8_h128_dual_value/iter_*_directional_h128_dual_value_exp8_npuct200_640g_b640_beta0p1_policytau.jsonl
+data/models/directional_cnn_h128_dual_value_exp8_adamw_wd1e4_iter_*_npuct200_policytau_replay.pt
+data/models/directional_cnn_h128_dual_value_exp8_adamw_wd1e4_iter_*_npuct200_policytau_replay_mlx.safetensors
 ```

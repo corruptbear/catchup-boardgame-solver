@@ -34,6 +34,57 @@ blue cells + white cells = 61
 Two equal integers cannot sum to an odd number. The engine therefore treats a
 terminal state with equal component vectors as an invalid state, not as a draw.
 
+## Small-Board Solved Openings
+
+The figures in this section mark first moves, not game positions. Blue cells
+are openings from which the first player can force a win; white cells are
+losing openings under perfect play.
+
+### Radius 1: 7 Cells
+
+![Winning first moves on the 7-cell board](figures/radius1_winning_openings.png)
+
+On the radius-1 board, the center is the only winning first move for Blue.
+There is also a short direct proof.
+
+After Blue opens in the center, every later Blue claim on the outer ring joins
+Blue's center group. If White claims two adjacent outer cells, White's largest
+group becomes 2, so Blue gets a three-cell turn and can make a connected group
+of 4. White can claim at most the last outer cell after that, so White cannot
+match Blue's largest group.
+
+If White claims one outer cell, or two non-adjacent outer cells, White has not
+increased the global largest group above 1. Blue gets a two-cell turn. Blue can
+choose two outer cells that split the remaining outer ring into White segments
+of size at most 2. Blue's group is then the center plus two outer cells, so it
+has size 3, and White's largest possible final group is at most 2.
+
+### Radius 2: 19 Cells
+
+![Winning first moves on the 19-cell board](figures/radius2_winning_openings.png)
+
+The radius-2 board is also a first-player win. The winning openings are the
+center and the six side-middle boundary cells:
+
+```text
+(0, 0)
+(1, -2), (-1, -1), (2, -1), (-2, 1), (1, 1), (-1, 2)
+```
+
+Here the proof is by exact minimax over completed turns. A state is represented
+by the Blue cell mask, White cell mask, side to move, and next turn's maximum
+claim count. Since the board has fewer than 30 cells, the implementation's
+early-win bound cannot stop a game before the board is full. Terminal states
+are therefore full-board states, scored by the usual lexicographic comparison
+of sorted connected-component sizes. At a Blue node, the state is winning if at
+least one legal turn leads to a Blue win. At a White node, the state remains
+winning for Blue only if every legal White turn leads to a Blue win.
+
+The exact search reduced positions by the 12 geometric symmetries of the hex
+board and solved 12,843,651 canonical states. After the center opening, White
+has `18 + C(18, 2) = 171` possible first turns, and none of them gives White a
+forced win.
+
 ## Largest Component-Size Margins
 
 Catchup compares each player's sorted connected-component sizes

@@ -279,14 +279,49 @@ catchup/cpp/build/catchup_self_play --teacher neural-puct --model data/models/gn
 
 ### Exploration
 
-For neural self-play data, there are two exploration controls near each root:
-root Dirichlet noise before search, and visit-count temperature after search.
+For neural self-play data, there are three exploration controls near each root:
+root policy temperature before search, root Dirichlet noise before search, and
+visit-count temperature after search.
+
+Root policy temperature flattens the neural policy prior before search:
+
+```text
+temperature_prior(action) =
+    model_prior(action) ^ (1 / tau_policy)
+    / sum(model_prior(*) ^ (1 / tau_policy))
+```
+
+The default self-play schedule is:
+
+```text
+tau_policy =
+    root_policy_temperature_end
+    + (root_policy_temperature_start - root_policy_temperature_end)
+      * 0.5 ^ (completed_turns / root_policy_temperature_halflife_turns)
+
+root_policy_temperature_start           1.25
+root_policy_temperature_end             1.10
+root_policy_temperature_halflife_turns  9.0
+```
+
+Root-only means the temperature is applied to the root node of each fresh MCTS
+search. Self-play runs a new search for every played internal action, so the
+schedule is still used throughout the game:
+
+```text
+turn 0 search root   uses tau_policy near 1.25
+turn 9 search root   uses tau_policy near 1.175
+turn 18 search root  uses tau_policy near 1.138
+```
+
+Inside any one search tree, child and grandchild node priors are not temperature
+scaled.
 
 Root Dirichlet noise changes the policy prior used by PUCT at that root:
 
 ```text
 noisy_prior(action) =
-    (1 - effective_epsilon) * model_prior(action)
+    (1 - effective_epsilon) * temperature_prior(action)
     + effective_epsilon * dirichlet_noise(action)
 ```
 
